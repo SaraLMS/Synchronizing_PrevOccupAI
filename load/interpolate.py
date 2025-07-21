@@ -20,11 +20,13 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 from scipy.spatial.transform import Slerp
 from scipy.interpolate import CubicSpline, interp1d
+from scipy.signal import resample_poly
+from constants import TIME_COLUMN_NAME
 
 # ------------------------------------------------------------------------------------------------------------------- #
 # file specific constants
 # ------------------------------------------------------------------------------------------------------------------- #
-# minimum difference between two HR time instances
+# minimum difference between two HR instances (time)
 MIN_HR_DIFF = 2
 
 
@@ -118,8 +120,8 @@ def zero_order_hold_interpolation(sensor_df: pd.DataFrame, fs: int = 100) -> pd.
     is assumed to be the time axis, while the remaining column contain sensor measurements.
 
     :param sensor_df: A DataFrame containing timestamps in the first column and HR sensor data in the remaining column
-    :param fs:
-    :return:
+    :param fs: The target sampling frequency in Hz. Default: 100 (Hz)
+    :return: A DataFrame containing the resampled time axis and interpolated sensor values.
     """
     # extract time axis
     time_axis = sensor_df.iloc[:, 0]
@@ -173,7 +175,7 @@ def interpolate_heart_rate_sensor(sensor_df: pd.DataFrame, fs: int = 100) -> pd.
     # convert time axis to seconds (and cast to numpy.array)
     time_axis = _convert_android_timestamp_to_seconds(time_axis).values
 
-    # the HR sensor acquires for 1 minute and stops for the next 3
+    # the HR sensor acquires for approx 1 minute and stops for the next 3
     # find where the indices of when the sensor stopped acquiring - where the difference is not 1
     breaks = np.where(np.diff(time_axis) > MIN_HR_DIFF)[0]
 
@@ -212,6 +214,61 @@ def interpolate_heart_rate_sensor(sensor_df: pd.DataFrame, fs: int = 100) -> pd.
     interpolated_df = pd.concat(interpolated_segments, ignore_index=True)
 
     return interpolated_df
+
+
+def resample_signals(sensor_df: pd.DataFrame, fs, fs_new) -> pd.DataFrame:
+    """
+    Function to resample signals using polyphase filtering. If fs_new > fs, the function upsamples the signal.
+    If fs_new < fs, this function downsamples the signals. This function also generates a time axis in seconds based
+    on the length of the signals and on the new sampling frequency. The first column of sensor_df is considered to be
+    a time-axis (or a index column) and the remaining columns are considered signals.
+
+    :param sensor_df: A DataFrame containing timestamps or indices in first column and sensor data in the remaining columns.
+    :param fs: The original sampling frequency.
+    :param fs_new: The target sampling frequency in Hz.
+    :return: A DataFrame where the first column is the timestamps in seconds and the remaining are resampled data.
+    """
+
+    # list for holding the resampled signals
+    resampled_signals = []
+
+    # extract signals (and cast to numpy.array)
+    signals = sensor_df.iloc[:, 1:].values
+
+    # calculate resampling factor based on original fs and the new fs
+    if fs > fs_new:
+        factor = round(fs/fs_new)
+        resample = 'down'
+
+    else:
+        factor = round(fs_new/fs)
+        resample = 'up'
+
+    # cycle over the signal channels
+    for channel in range(signals.shape[1]):
+
+        if resample == 'up':
+
+            # upsample signals using polyphase filtering
+            resampled_signal = resample_poly(signals[:, channel], up=factor, down=1)
+
+        else:
+
+            # downsample signals using polyphase filtering
+            resampled_signal = resample_poly(signals[:, channel], up=1, down=factor)
+
+        # append to resample signals
+        resampled_signals.append(resampled_signal)
+
+    # generate new time axis with the new sampling frequency
+    time_axis_inter = _generate_time_column_from_samples(resampled_signals[0].shape[0], fs_new)
+
+    # create interpolated DataFrame and change time column name
+    resampled_df = pd.DataFrame(np.column_stack([time_axis_inter] + resampled_signals),
+                                   columns=[TIME_COLUMN_NAME] + list(sensor_df.columns[1:]))
+
+    return resampled_df
+
 # ------------------------------------------------------------------------------------------------------------------- #
 # private functions
 # ------------------------------------------------------------------------------------------------------------------- #
@@ -233,3 +290,14 @@ def _convert_android_timestamp_to_seconds(time_column: pd.Series) -> pd.Series:
     time_column = time_column * 1e-9
 
     return time_column
+
+def _generate_time_column_from_samples(signal_size:int, fs: int):
+
+    # get time (seconds) between each sample
+    delta_t = 1/fs
+
+    # generate time column in seconds
+    time_column = np.arange(signal_size) * delta_t
+
+    return time_column
+

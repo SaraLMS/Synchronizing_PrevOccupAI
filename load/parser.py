@@ -5,6 +5,7 @@ Available Functions
 -------------------
 [Public]
 get_file_paths_by_device(...): Function to group raw data file paths according to the device
+extract_sensor_from_filename(...): Extracts the sensor name from the filename of the sensor data
 -------------------
 
 [Private]
@@ -78,7 +79,13 @@ def get_file_paths_by_device(folder_path: Union[str, os.PathLike]) -> Dict[str, 
 
 
 def extract_sensor_from_filename(filename: str) -> str:
+    """
+    Extracts the sensor name based on the filename. Works only for sensor data acquired  using the OpenSignals
+    application.
 
+    :param filename: A str with the filename
+    :return: The sensor prefix based on the sensor name found on the filename
+    """
 
     # iterate through the sensor file prefixes and sensor names
     for sensor_prefix, sensor_name in zip(AVAILABLE_ANDROID_PREFIXES, AVAILABLE_ANDROID_SENSORS):

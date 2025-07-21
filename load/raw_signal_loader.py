@@ -4,7 +4,20 @@ Functions to load raw sensor data
 Available Functions
 -------------------
 [Public]
+load_data_from_same_recording(...): Loads and synchronizes raw sensor data (phone, watch, or MuscleBan) from a folder.
+-------------------
 
+[Private]
+_load_raw_data(...): Loads and cleans multiple raw sensor data files from a folder.
+_load_sensor_file(...): Loads a single raw sensor file and applies necessary preprocessing steps.
+_clean_df(...): Removes NaN values and duplicates from a DataFrame and resets its index.
+_remove_non_unit_quaternion(...): Filters invalid rotation vector samples that don't represent unit quaternions.
+_pad_data(...): Aligns sensors in time using either zero or same-value padding.
+_create_padding(...): Helper function to generate padding rows for a given list of timestamps and constant values.
+_re_sample_data(...): Resamples raw sensor signals using appropriate interpolation (cubic spline, SLERP, etc.).
+_load_muscleban_data(...): Loads EMG and ACC data from MuscleBan device files, filtering out unreliable data.
+_get_largest_file(...): Selects the largest file (by size) among a list of files in a directory.
+-------------------
 """
 
 # ------------------------------------------------------------------------------------------------------------------- #
@@ -14,14 +27,13 @@ import os
 import pandas as pd
 import numpy as np
 from typing import List, Tuple, Dict, Any, Union
-
-from matplotlib import pyplot as plt
 from tqdm import tqdm
 
+# internal imports
 from load.parser import get_file_paths_by_device, extract_sensor_from_filename
 from .interpolate import cubic_spline_interpolation, slerp_interpolation, zero_order_hold_interpolation, \
-    interpolate_heart_rate_sensor
-from constants import ROT, IMU_SENSORS, PHONE, WATCH, NOISE, HEART, TIME_COLUMN_NAME
+    interpolate_heart_rate_sensor, resample_signals
+from constants import ROT, IMU_SENSORS, PHONE, WATCH, NOISE, HEART, TIME_COLUMN_NAME, VALID_MBAN_DATA, FS_MBAN
 
 # ------------------------------------------------------------------------------------------------------------------- #
 # file specific constants
@@ -42,11 +54,14 @@ STOPPING_TIMES = 'stopping times'
 # ------------------------------------------------------------------------------------------------------------------- #
 def load_data_from_same_recording(folder_path: str, fs: int = 100, padding_type: str = PADDING_SAME) -> Dict[str, pd.DataFrame]:
     """
-    Function to load Android sensor data from the same recording into a single DataFrame. The function assumes that
-    files stored at the provided path belong to the same recording. Alignment (in time) of the files is done based on
-    the last sensor to start and the first to stop, meaning that data is only considered while all sensors are recording
-    at the same time. The data is re-sampled to the sampling rate given by 'fs'. The resampling is necessary as the
-    Android OS does not ensure equidistant sampling at a fixes rate.
+    Function to load sensor data from the same recording into a single DataFrame. This can be used to load
+    Android sensor data and MuscleBan (Plux Wireless Biosignals) data, if acquired using the OpenSignals application.
+
+    The function assumes that files stored at the provided path belong to the same recording. Alignment (in time) of
+    the files is done based on the last sensor to start and the first to stop, meaning that data is only considered
+    while all sensors are recording at the same time. The data is re-sampled to the sampling rate given by 'fs'.
+    The resampling is necessary as the Android OS does not ensure equidistant sampling at a fixes rate. Downsampling
+    is also need for the muscleban data, which is acquired ar 1000 Hz
 
     :param folder_path: the path to the folder containing the sensor files.
     :param fs: the sampling rate to which all sensors should be re-sampled to. Default: 100 (Hz)
@@ -65,11 +80,18 @@ def load_data_from_same_recording(folder_path: str, fs: int = 100, padding_type:
         # if the device is a muscleban the loading is handled differently
         if device != PHONE and device != WATCH:
 
+            # load emg and acc data
             muscleban_sensor_data = _load_muscleban_data(folder_path, sensor_path_list)
-            # TODO INTERPOLATION MISSING
+
+            # remove nan values and duplicates + reset index
+            muscleban_sensor_data = _clean_df(muscleban_sensor_data)
+
+            # the muscleban signals are already aligned in time
+            # downsample muscleban data to 100 Hz
+            resampled_muscleban_data = resample_signals(muscleban_sensor_data, fs=FS_MBAN, fs_new=fs)
 
             # add to the dictionary
-            device_data_dict[device] = muscleban_sensor_data
+            device_data_dict[device] = resampled_muscleban_data
 
         else:
 
@@ -84,11 +106,8 @@ def load_data_from_same_recording(folder_path: str, fs: int = 100, padding_type:
             interpolated_data = _re_sample_data(padded_data, report, fs=fs)
 
             # (3) create a DataFrame containing all the data
-            aligned_sensor_df = pd.concat([interpolated_data[0]] + [df.drop(columns=['t']) for df in interpolated_data[1:]],
+            aligned_sensor_df = pd.concat([interpolated_data[0]] + [df.drop(columns=[TIME_COLUMN_NAME]) for df in interpolated_data[1:]],
                                           axis=1)
-
-            aligned_sensor_df.plot(x='t', y='HEART')
-            plt.show()
 
             # add to the dictionary
             device_data_dict[device] = aligned_sensor_df
@@ -143,7 +162,6 @@ def _load_raw_data(folder_path: str, sensor_filenames: List[str]) -> Tuple[List[
         start_times.append(sensor_df[TIME_COLUMN_NAME].iloc[0])
         stop_times.append(sensor_df[TIME_COLUMN_NAME].iloc[-1])
 
-
     # create dictionary
     report = {
         LOADED_SENSORS: loaded_sensors,
@@ -178,19 +196,15 @@ def _load_sensor_file(folder_path: str, file_name: str, sensor_name: str) -> pd.
     # remove nan column (the loading of the opensignals sensor file through read_csv(...) generates a nan column
     sensor_df.dropna(axis=1, how='all', inplace=True)
 
-    # column names if it is the noise recorder
-    if sensor_name == NOISE:
-
-        col_names = [TIME_COLUMN_NAME, f'{sensor_name}']
-
-    # column names if it is the heart rate sensor
-    elif sensor_name == HEART:
+    # column names if it is the noise recorder or heart rate sensor
+    if sensor_name == NOISE or sensor_name == HEART:
 
         col_names = [TIME_COLUMN_NAME, f'{sensor_name}']
 
     # perform extra steps for rotation vector
     elif sensor_name == ROT:
 
+        # rotation vector from the smartwatch has an extra column (estimated heading) to be removed
         if len(sensor_df.columns) > 5:
 
             sensor_df = sensor_df.drop(sensor_df.columns[-1], axis=1)
@@ -368,10 +382,11 @@ def _create_padding(timestamps: List[Union[int, float]], values: np.ndarray):
 
 def _re_sample_data(sensor_data: List[pd.DataFrame], report:  Dict[str, Any], fs=100) -> List[pd.DataFrame]:
     """
-    Resamples the sensor data to the specified sampling frequency.
+    Resamples the sensor data from the smartwatch and smartphone to the specified sampling frequency.
     This function takes a list of sensor data DataFrames and resamples each sensor's data to the desired
     sampling frequency (`fs`). For IMU-based sensors (ACC, GYR, MAG), cubic spline interpolation is used,
-    and for Rotation Vector data, SLERP interpolation is performed.
+    and for Rotation Vector data, SLERP interpolation is performed. For the noise recorder and heart rate sensor,
+    zero order hold interpolation (repeat the previous value).
 
     :param sensor_data: A list of DataFrames, each containing sensor data. It is assumed that the first contains
                         the time axis, while the other columns contain sensor data.
@@ -385,7 +400,7 @@ def _re_sample_data(sensor_data: List[pd.DataFrame], report:  Dict[str, Any], fs
 
     # cycle over the sensors
     for sensor_df, sensor_name in tqdm(zip(sensor_data, report[LOADED_SENSORS]), total=len(sensor_data),
-                                       desc=f"Ensurig equidistant sampling by resampling data to {fs} Hz"):
+                                       desc=f"Ensuring equidistant sampling by resampling data to {fs} Hz"):
 
         # DataFrame for holding the interpolated data
         interpolated_sensor_df = pd.DataFrame()
@@ -408,15 +423,15 @@ def _re_sample_data(sensor_data: List[pd.DataFrame], report:  Dict[str, Any], fs
             # perform zero order hold interpolation
             interpolated_sensor_df = zero_order_hold_interpolation(sensor_df, fs=fs)
 
+        # interpolate heart rate sensor
         elif sensor_name == HEART:
 
-            # interpolate heart rate sensor
+            # zero order hold interpolation
             interpolated_sensor_df = interpolate_heart_rate_sensor(sensor_df, fs=fs)
 
         else:
 
-            # TODO add interpolation (downsample) method for muscleban
-            # (in the future: e.g., heart rate data from smartwatch & noise sensor)
+            # This does not happen - just for code completion
             print(f"There is no interpolation implemented for the sensor you have chosen. Chosen sensor: {sensor_name}.")
 
         # append interpolated data to list
@@ -444,17 +459,17 @@ def _load_muscleban_data(folder_path: Union[str, os.PathLike], filenames: List[s
     # remove Nan column that is generated when using pd.read_csv
     sensor_df = sensor_df.dropna(axis=1, how="all")
 
-    # if there are 9 column then there is an initial column with only zeros
+    # if there are 9 column then the second column is only zeros (happens in some firmware versions)
     if len(sensor_df.columns) > 8:
 
         # remove zero column
         sensor_df = sensor_df.drop(sensor_df.columns[1], axis=1)
 
-    # remove MAG which are the last three
+    # remove MAG which are the last three channels
     sensor_df = sensor_df.drop(sensor_df.columns[-3:], axis=1)
 
     # add column names
-    sensor_df.columns = ['nSeq', 'emg', 'xACC', 'yACC', 'zACC']
+    sensor_df.columns = VALID_MBAN_DATA
 
     return sensor_df
 
