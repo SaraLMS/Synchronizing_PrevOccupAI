@@ -6,10 +6,10 @@ Available Functions
 [Public]
 get_file_paths_by_device(...): Function to group raw data file paths according to the device
 extract_sensor_from_filename(...): Extracts the sensor name from the filename of the sensor data
+extract_device_from_filename(...): Extracts the device name from the raw data filename
 -------------------
 
 [Private]
-_extract_device_from_filename(...): Extracts the device name from the raw data filename
 -------------------
 """
 
@@ -59,7 +59,7 @@ def get_file_paths_by_device(folder_path: Union[str, os.PathLike]) -> Dict[str, 
     for filename in files:
 
         # check the device based on the filename
-        device = _extract_device_from_filename(filename)
+        device = extract_device_from_filename(filename)
 
         # found logger file
         if device is None:
@@ -99,12 +99,7 @@ def extract_sensor_from_filename(filename: str) -> str:
     raise ValueError(f"No valid sensor found in filename: {filename}")
 
 
-
-# ------------------------------------------------------------------------------------------------------------------- #
-# private functions
-# ------------------------------------------------------------------------------------------------------------------- #
-
-def _extract_device_from_filename(filename: str) -> Optional[str]:
+def extract_device_from_filename(filename: str) -> Optional[str]:
     """
     Extracts the device name from a sensor data filename.
 
@@ -141,3 +136,6 @@ def _extract_device_from_filename(filename: str) -> Optional[str]:
         return None
 
 
+# ------------------------------------------------------------------------------------------------------------------- #
+# private functions
+# ------------------------------------------------------------------------------------------------------------------- #
