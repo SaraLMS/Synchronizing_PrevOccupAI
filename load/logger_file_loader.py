@@ -33,7 +33,6 @@ from load.parser import extract_device_from_filename
 # ------------------------------------------------------------------------------------------------------------------- #
 # file specific constants
 # ------------------------------------------------------------------------------------------------------------------- #
-LOGGER_FILENAME_PREFIX = 'opensignals_ACQUISITION_LOG_'
 TIMESTAMP = 'timestamp'
 LOG = 'log'
 LOGGER_FILE_COLUMNS = [TIMESTAMP, LOG]
@@ -107,31 +106,6 @@ def load_logger_file_info(folder_path: str) -> Optional[Dict[str, str]]:
 # ------------------------------------------------------------------------------------------------------------------- #
 # private functions
 # ------------------------------------------------------------------------------------------------------------------- #
-
-
-def _check_logger_file(folder_path: str) -> bool:
-    """
-    Checks if a logger file exists in the specified folder and that it is not empty.
-    Assumes logger file name starts with 'opensignals_ACQUISITION_LOG_' and includes
-    a timestamp.
-
-    :param folder_path: The path to the folder containing the RAW acquisitions.
-    :return: True if it exists and is not empty, otherwise False.
-    """
-    # Pattern to match the logger file, assuming it starts with LOGGER_FILENAME_PREFIX
-    pattern = os.path.join(folder_path, f'{LOGGER_FILENAME_PREFIX}*')
-
-    # Use glob to find files that match the pattern
-    matching_files = glob.glob(pattern)
-
-    # iterate through the files that match the logger file prefix - should only be one
-    for file_path in matching_files:
-
-        # gets the first one (and only) that is not empty
-        if os.path.getsize(file_path) > 0:
-            return True
-
-    return False
 
 
 def _filter_logger_file(logger_df: pd.DataFrame) -> pd.DataFrame:

@@ -83,8 +83,8 @@ def load_data_from_same_recording(folder_path: str, fs: int = 100, padding_type:
             # load emg and acc data
             muscleban_sensor_data = _load_muscleban_data(folder_path, sensor_path_list)
 
-            # remove nan values and duplicates + reset index
-            muscleban_sensor_data = _clean_df(muscleban_sensor_data)
+            # remove nan values and duplicates + reset index TODO _clean_df does not work for mban because of time column (has to be nseq)
+            # muscleban_sensor_data = _clean_df(muscleban_sensor_data)
 
             # the muscleban signals are already aligned in time
             # downsample muscleban data to 100 Hz
