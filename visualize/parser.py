@@ -2,11 +2,13 @@
 # imports
 # ------------------------------------------------------------------------------------------------------------------- #
 import os
-from typing import Dict
+from typing import Dict, List
 import re
 
 # internal imports
 import load
+from utils import extract_group_from_path, extract_device_num_from_path
+
 
 # ------------------------------------------------------------------------------------------------------------------- #
 # public functions
@@ -43,15 +45,23 @@ def get_device_filename_timestamp(folder_path: str) -> Dict[str, str]:
     return start_times_dict
 
 
-def extract_device_num_from_folder_path(folder_path: str):
+def get_missing_devices(folder_path: str, list_devices: List[str]) -> List[str]:
 
-    # find the group in the folder path (group1, group2, group3 ...)
-    if match := re.search(r'LIBPhys #(\d+)', folder_path):
+    # load metadata df
+    meta_data_df = load.load_meta_data()
 
-        return match.group()
+    # extract group number and device number from folder path - subject identifiers
+    group_num = extract_group_from_path(folder_path)
+    device_num = extract_device_num_from_path(folder_path)
 
-    else:
-        return None
+    # get expected devices for the subject
+    expected_devices = load.get_expected_devices(meta_data_df, group_num, device_num)
+
+    # check which devices are missing
+    missing_devices = [device for device in expected_devices if device not in list_devices]
+
+    return missing_devices
+
 # ------------------------------------------------------------------------------------------------------------------- #
 # private functions
 # ------------------------------------------------------------------------------------------------------------------- #

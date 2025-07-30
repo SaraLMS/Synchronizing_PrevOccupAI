@@ -15,7 +15,8 @@ load_meta_data(): loads the meta-data contained in subjects_info.csv into a pand
 # imports
 # ------------------------------------------------------------------------------------------------------------------- #
 import pandas as pd
-
+from typing import List, Optional
+from constants import PHONE, WATCH
 
 # ------------------------------------------------------------------------------------------------------------------- #
 # public functions
@@ -47,3 +48,21 @@ def get_muscleban_side(meta_data_df, mac_address):
     # If not found
     return None
 
+
+def get_expected_devices(meta_data_df, group: str, device_num: str) -> List[str]:
+
+    # list with expected device - phone and watch are added manually as they are not on the metadata df
+    expected_devices = [PHONE, WATCH]
+
+    # Filter the DataFrame for the given group and device number
+    row = meta_data_df[(meta_data_df['group'] == group) & (meta_data_df['device_num'] == device_num)]
+
+
+    # get the mac address of the musclebans
+    mban_left = row.iloc[0]['mBAN_left']
+    mban_right = row.iloc[0]['mBAN_right']
+
+    # muscleban mac addresses to the list
+    expected_devices.extend([mban_left, mban_right])
+
+    return expected_devices

@@ -176,6 +176,9 @@ def _get_device_start_time(logger_df: pd.DataFrame, device: str) -> Dict[str, st
         # find the LAST entry with the device mac address
         start_times_dict = _find_mban_logger_timestamps(logger_df, device)
 
+    # remove last 4 characters of the timestamp string (e.g., ".000") and replace hh:mm:ss to hh-mm-ss
+    start_times_dict[device] = start_times_dict[device][:-4].replace(":", "-")
+
     return start_times_dict
 
 
