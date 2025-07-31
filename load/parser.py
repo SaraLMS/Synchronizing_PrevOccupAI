@@ -24,6 +24,12 @@ from typing import Union, Dict, List, Optional
 # internal imports
 from constants import WATCH, PHONE, ANDROID, ANDROID_WEAR, AVAILABLE_ANDROID_PREFIXES, AVAILABLE_ANDROID_SENSORS
 
+
+# ------------------------------------------------------------------------------------------------------------------- #
+# file specific constants
+# ------------------------------------------------------------------------------------------------------------------- #
+MIN_BYTES = 1000
+
 # ------------------------------------------------------------------------------------------------------------------- #
 # public functions
 # ------------------------------------------------------------------------------------------------------------------- #
@@ -35,6 +41,8 @@ def get_file_paths_by_device(folder_path: Union[str, os.PathLike]) -> Dict[str, 
     This function iterates through all sensor data files in the specified folder and organizes them by device.
     Each file typically represents data from a specific sensor (e.g., accelerometer, gyroscope) on a particular device.
     Files that do not match a known device (e.g., logger files) are ignored.
+
+    This function ignores the sensor files that are either empty or only have the header.
 
     The result is a dictionary where:
     - Keys are device identifiers (e.g., "phone", "watch", or a MuscleBan MAC address).
@@ -57,6 +65,10 @@ def get_file_paths_by_device(folder_path: Union[str, os.PathLike]) -> Dict[str, 
 
     # iterate through the files inside the folder
     for filename in files:
+
+        # If less than 1 kb than it's either empty or only has the header - ignore
+        if os.path.getsize(os.path.join(folder_path, filename)) < MIN_BYTES:
+            continue
 
         # check the device based on the filename
         device = extract_device_from_filename(filename)

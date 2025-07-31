@@ -4,15 +4,11 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f6da5794-6705-4583-ae40-8ce607db45e5" name="Changes" comment="added subject metadata and implemented daily visualizations">
-      <change afterPath="$PROJECT_DIR$/utils.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/dictionaries/project.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/dictionaries/project.xml" afterDir="false" />
+    <list default="true" id="f6da5794-6705-4583-ae40-8ce607db45e5" name="Changes" comment="implemented the visualizations per group">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/load/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/load/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/load/logger_file_loader.py" beforeDir="false" afterPath="$PROJECT_DIR$/load/logger_file_loader.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/load/meta_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/load/meta_data.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/constants.py" beforeDir="false" afterPath="$PROJECT_DIR$/constants.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/load/parser.py" beforeDir="false" afterPath="$PROJECT_DIR$/load/parser.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/visualize/parser.py" beforeDir="false" afterPath="$PROJECT_DIR$/visualize/parser.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/visualize/visualize_acquisitions.py" beforeDir="false" afterPath="$PROJECT_DIR$/visualize/visualize_acquisitions.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -57,7 +53,7 @@
     "Python.main.executor": "Run",
     "Python.parser.executor": "Debug",
     "Python.raw_signal_loader.executor": "Debug",
-    "Python.visualize_acquisitions.executor": "Debug",
+    "Python.visualize_acquisitions.executor": "Run",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.git.unshallow": "true",
     "SHARE_PROJECT_CONFIGURATION_FILES": "true",
@@ -132,7 +128,15 @@
       <option name="project" value="LOCAL" />
       <updated>1753344307050</updated>
     </task>
-    <option name="localTasksCounter" value="7" />
+    <task id="LOCAL-00007" summary="implemented the visualizations per group">
+      <option name="closed" value="true" />
+      <created>1753866152520</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1753866152520</updated>
+    </task>
+    <option name="localTasksCounter" value="8" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -153,17 +157,7 @@
     <MESSAGE value="finished implementation of the logger file loading and retrieving initial timestamps" />
     <MESSAGE value="started implementing the visualization. Got the dictionary with all of the timestamps and lengths" />
     <MESSAGE value="added subject metadata and implemented daily visualizations" />
-    <option name="LAST_COMMIT_MESSAGE" value="added subject metadata and implemented daily visualizations" />
-  </component>
-  <component name="XDebuggerManager">
-    <breakpoint-manager>
-      <breakpoints>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/visualize/visualize_acquisitions.py</url>
-          <line>57</line>
-          <option name="timeStamp" value="5" />
-        </line-breakpoint>
-      </breakpoints>
-    </breakpoint-manager>
+    <MESSAGE value="implemented the visualizations per group" />
+    <option name="LAST_COMMIT_MESSAGE" value="implemented the visualizations per group" />
   </component>
 </project>

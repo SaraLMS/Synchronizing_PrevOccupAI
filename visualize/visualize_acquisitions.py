@@ -4,15 +4,17 @@
 import os
 import glob
 import pandas as pd
-from typing import Dict, Optional, List, Union
+from typing import Dict, Any
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 from matplotlib.dates import DateFormatter
+from matplotlib.patches import Patch
 import re
+import locale
 
 # internal imports
 import load
-from constants import PHONE
+from constants import PHONE, WATCH
 from .parser import get_device_filename_timestamp
 from utils import extract_device_num_from_path, extract_group_from_path, extract_date_from_path, \
     get_most_common_acquisition_times, create_dir
@@ -24,12 +26,18 @@ LOGGER_FILENAME_PREFIX = 'opensignals_ACQUISITION_LOG_'
 LENGTH = 'length'
 START_TIMES = 'start_times'
 COLOR_PALLETE = ['#f2b36f', "#F07A15", '#4D92D0', '#3C787E']
-DEVICE_ORDER = ['mBAN left', 'mBAN right', 'watch','phone']
+
+MBAN_LEFT = 'mBAN left'
+MBAN_RIGHT = 'mBAN right'
+DEVICE_ORDER = [MBAN_LEFT, MBAN_RIGHT, WATCH,PHONE]
+
+VERTICAL_SPACING = 0.2
+BAR_HEIGHT = 0.1
 # ------------------------------------------------------------------------------------------------------------------- #
 # public functions
 # ------------------------------------------------------------------------------------------------------------------- #
 
-def visualize_group_acquisitions(group_folder_path, fs=100):
+def visualize_group_acquisitions(group_folder_path, fs=100) -> None:
 
     # iterate through the subjects in the group
     for subject_folder in os.listdir(group_folder_path):
@@ -45,7 +53,7 @@ def visualize_group_acquisitions(group_folder_path, fs=100):
 
 
 
-def visualize_daily_acquisitions(subject_folder_path: str, date: str, fs=100):
+def visualize_daily_acquisitions(subject_folder_path: str, date: str, fs=100) -> None:
     """
     Visualizes daily signal acquisitions per device as horizontal bars over a timeline.
 
@@ -60,142 +68,96 @@ def visualize_daily_acquisitions(subject_folder_path: str, date: str, fs=100):
     # Get the missing data, if any
     missing_data_dict = _get_missing_data(subject_folder_path, acquisitions_dict)
 
-    # Prepare full daily path
-    daily_folder_path = os.path.join(subject_folder_path, date)
+    # only plot if there's any data
+    if acquisitions_dict:
 
-    fig, ax = plt.subplots(figsize=(10, 3))
+        # get full daily path
+        daily_folder_path = os.path.join(subject_folder_path, date)
 
-    vertical_spacing = 0.2
-    bar_height = 0.1
+        # variable to hold the earliest timestamp among all device acquisitions
+        min_start_time = None
 
-    # variable to hold the earliest timestamp among all device acquisitions
-    min_start_time = None
+        # variable to hold the last end time among all device acquisitions - to define the right boundary of the bar
+        latest_end_time = None
 
-    # variable to hold the last end time among all device acquisitions - to define the right boundary of the bar
-    latest_end_time = None
+        # change muscleban device name to mBAN right or mBAN left from the dict with the acquisition data
+        acquisitions_dict = _normalize_device_names(acquisitions_dict)
 
-    # Normalize acquisition device names (convert MAC to readable names)
-    normalized_acquisitions_dict = {}
-    meta_data_df = load.load_meta_data()
+        # change muscleban device name to mBAN right or mBAN left from the dict with the acquisition data
+        missing_data_dict = _normalize_device_names(missing_data_dict)
 
-    for device_raw, data in acquisitions_dict.items():
-        if match := re.search(r'[A-Z0-9]{12}', device_raw):
-            device = load.get_muscleban_side(meta_data_df, match.group()).replace("_", " ")
-        else:
-            device = device_raw
-        normalized_acquisitions_dict[device] = data
+        # Loop over both dictionaries to find time range first to start and last to end acquiring
+        for data_dict in (acquisitions_dict, missing_data_dict):
+            for data in data_dict.values():
+                for length, start_str in zip(data[LENGTH], data[START_TIMES]):
+                    start_dt = datetime.strptime(start_str, "%H-%M-%S")
+                    end_dt = start_dt + timedelta(seconds=length / fs)
 
-    # Also normalize missing data device names
-    normalized_missing_data_dict = {}
-    for device_raw, data in missing_data_dict.items():
-        if match := re.search(r'[A-Z0-9]{12}', device_raw):
-            device = load.get_muscleban_side(meta_data_df, match.group()).replace("_", " ")
-        else:
-            device = device_raw
-        normalized_missing_data_dict[device] = data
+                    # get the earliest timestamp
+                    if min_start_time is None or start_dt < min_start_time:
+                        min_start_time = start_dt
 
-    # Loop over both normalized dictionaries to find time range
-    for data_dict in (normalized_acquisitions_dict, normalized_missing_data_dict):
-        for data in data_dict.values():
-            for length, start_str in zip(data[LENGTH], data[START_TIMES]):
-                start_dt = datetime.strptime(start_str, "%H-%M-%S")
-                end_dt = start_dt + timedelta(seconds=length / fs)
+                    # get the latest timestamp
+                    if latest_end_time is None or end_dt > latest_end_time:
+                        latest_end_time = end_dt
 
-                if min_start_time is None or start_dt < min_start_time:
-                    min_start_time = start_dt
+        # create a sorted dictionary according to DEVICE_ORDER
+        acquisitions_dict = {
+            d: acquisitions_dict[d]
+            for d in sorted(acquisitions_dict.keys(), key=lambda d: DEVICE_ORDER.index(d) if d in DEVICE_ORDER else len(DEVICE_ORDER))
+        }
 
-                if latest_end_time is None or end_dt > latest_end_time:
-                    latest_end_time = end_dt
+        device_to_index = {device: i for i, device in enumerate(acquisitions_dict.keys())}
 
-    # Sort devices using DEVICE_ORDER
-    sorted_devices = sorted(
-        normalized_acquisitions_dict.keys(),
-        key=lambda d: DEVICE_ORDER.index(d) if d in DEVICE_ORDER else len(DEVICE_ORDER)
-    )
+        fig, ax = plt.subplots(figsize=(10, 3))
 
-    device_to_index = {}
+        # Plot acquisitions horizontal bars
+        plot_device_bars(ax=ax,data_dict=acquisitions_dict,device_to_index=device_to_index,fs=fs,color_map=lambda i: COLOR_PALLETE[i % len(COLOR_PALLETE)],)
 
-    # Plot actual acquisitions
-    for i, device in enumerate(sorted_devices):
-        data = normalized_acquisitions_dict[device]
-        device_to_index[device] = i
+        # Plot missing data horizontal bars
+        plot_device_bars(ax=ax,data_dict=missing_data_dict,device_to_index=device_to_index,fs=fs,color_map=lambda _: 'lightgray',
+                         edgecolor='black',linestyle='dashed',linewidth=0.8)
 
-        lengths = data[LENGTH]
-        start_times = data[START_TIMES]
+        # Add labels and dashed horizontal lines
+        for device, i in device_to_index.items():
+            y_center = i * VERTICAL_SPACING
+            y_bottom = y_center - BAR_HEIGHT / 2
+            y_top = y_center + BAR_HEIGHT / 2
 
-        for length, start_str in zip(lengths, start_times):
-            start_dt = datetime.strptime(start_str, "%H-%M-%S")
-            duration = timedelta(seconds=length / fs)
-            y_center = i * vertical_spacing
-            y_bottom = y_center - bar_height / 2
-            y_top = y_center + bar_height / 2
+            ax.hlines(y=[y_bottom, y_top],xmin=min_start_time,xmax=latest_end_time + timedelta(seconds=5),colors="#06171C",linestyles="dashed",linewidth=1.1)
 
-            ax.broken_barh(
-                [(start_dt, duration)],
-                (y_bottom, bar_height),
-                facecolors=COLOR_PALLETE[i % len(COLOR_PALLETE)]
-            )
+            ax.text(min_start_time - timedelta(seconds=500), y_center, device, va='center', ha='right', fontsize=12, color='#06171C')
 
-            ax.hlines(y=[y_bottom, y_top],
-                      xmin=min_start_time,
-                      xmax=latest_end_time + timedelta(seconds=5),
-                      colors="#06171C", linestyles="dashed", linewidth=1.1)
+        # Formatting
+        ax.xaxis.set_major_formatter(DateFormatter("%H:%M"))
+        ax.set_xlim(min_start_time, latest_end_time + timedelta(seconds=5))
 
-        ax.text(min_start_time - timedelta(seconds=500), i * vertical_spacing, device,
-                va='center', ha='right', fontsize=12, color='#06171C')
+        # remove axis lines
+        for spine in ['top', 'right', 'left', 'bottom']:
+            ax.spines[spine].set_visible(False)
 
-    # Plot missing data
-    for device, data in normalized_missing_data_dict.items():
-        if device not in device_to_index:
-            continue
+        ax.set_xlabel("Time (hh:mm)", color='#06171C')
+        ax.set_yticks([])
 
-        i = device_to_index[device]
-        y_center = i * vertical_spacing
-        y_bottom = y_center - bar_height / 2
+        week_day, date = _get_day_string(extract_date_from_path(daily_folder_path), locale_string= 'pt_PT.UTF-8')
 
-        for start_str, length in zip(data[START_TIMES], data[LENGTH]):
-            if not start_str:
-                continue
+        ax.set_title(f"{week_day} | {date}", color='#06171C')
 
-            start_dt = datetime.strptime(start_str, "%H-%M-%S")
-            duration = timedelta(seconds=length / fs)
+        # Add legend for missing data
+        missing_patch = Patch(facecolor='lightgray', edgecolor='black', linestyle='dashed', label='Missing data')
+        ax.legend(handles=[missing_patch], loc='upper left', bbox_to_anchor=(1.02, 1.02), frameon=False, handleheight=2.5, handlelength=2)
 
-            ax.broken_barh(
-                [(start_dt, duration)],
-                (y_bottom, bar_height),
-                facecolors='lightgray',
-                edgecolor='black',
-                linestyle='dashed',
-                linewidth=0.8
-            )
+        plt.tight_layout()
 
-    # Formatting
-    ax.xaxis.set_major_formatter(DateFormatter("%H:%M:%S"))
-    ax.set_xlim(min_start_time, latest_end_time + timedelta(seconds=5))
+        # generate output filename
+        out_filename = (f"group_{extract_group_from_path(daily_folder_path)}_{extract_device_num_from_path(daily_folder_path)}_"
+                        f"{extract_date_from_path(daily_folder_path)}.png")
 
-    for spine in ['top', 'right', 'left', 'bottom']:
-        ax.spines[spine].set_visible(False)
+        # generate output path
+        output_path = create_dir(os.getcwd(), f"group_{extract_group_from_path(daily_folder_path)}")
 
-    ax.set_xlabel("Time (hh:mm:ss)", color='#06171C')
-    ax.set_yticks([])
-
-    ax.set_title(
-        f"Subject: Group {extract_group_from_path(daily_folder_path)} | "
-        f"{extract_device_num_from_path(daily_folder_path)} | {extract_date_from_path(daily_folder_path)}",
-        color='#06171C'
-    )
-
-    plt.tight_layout()
-
-    # generate output filename
-    out_filename = (f"group_{extract_group_from_path(daily_folder_path)}_{extract_device_num_from_path(daily_folder_path)}_"
-                    f"{extract_date_from_path(daily_folder_path)}.png")
-
-    # generate output path
-    output_path = create_dir(os.getcwd(), f"group_{extract_group_from_path(daily_folder_path)}")
-
-    # save plot
-    plt.savefig(os.path.join(output_path, out_filename), dpi=300, bbox_inches='tight')
+        # save plot
+        plt.savefig(os.path.join(output_path, out_filename), dpi=300, bbox_inches='tight')
 
 
 
@@ -311,18 +273,26 @@ def _check_logger_file(folder_path: str) -> bool:
     return False
 
 
-def _get_missing_timestamp(subject_folder_path, acquisition_times_list):
-
-    # get the most common start times for the subject
+def _get_missing_timestamp(subject_folder_path, acquisition_times_list, tolerance_seconds=300):
+    # Get the most common expected acquisition times for the subject
     common_times_list = get_most_common_acquisition_times(subject_folder_path)
 
-    # replace the seconds with '00'
-    acquisition_times_list = [time[:-2] + '00' for time in acquisition_times_list]
+    # Convert both the expected and actual times to datetime objects
+    acquisition_times_dt = [datetime.strptime(time, "%H-%M-%S") for time in acquisition_times_list]
+    common_times_dt = [datetime.strptime(time, "%H-%M-%S") for time in common_times_list]
 
-    # compare sets do get th missing timestamps
-    missing_times = set(common_times_list) - set(acquisition_times_list)
+    # Initialize list to store missing times
+    missing_times = []
 
-    return missing_times
+    # For each expected time, check if there is a matching actual time within the tolerance window
+    for common_time in common_times_dt:
+        if not any(abs((common_time - acq_time).total_seconds()) <= tolerance_seconds for acq_time in acquisition_times_dt):
+
+            # If no matching time found within tolerance, consider it missing
+            missing_times.append(common_time.strftime("%H-%M-%S"))
+
+    # Return the set of missing timestamps as strings
+    return set(missing_times)
 
 
 def _get_missing_data(subject_folder_path, acquisitions_dict, fs=100):
@@ -352,3 +322,78 @@ def _get_missing_data(subject_folder_path, acquisitions_dict, fs=100):
 
     return missing_data_dict
 
+
+def _normalize_device_names(acquisitions_dict: Dict[str, Any]):
+    # change muscleban device name to mBAN right or mBAN left
+    normalized_acquisitions_dict = {}
+
+    for device_raw, data in acquisitions_dict.items():
+        if match := re.search(r'[A-Z0-9]{12}', device_raw):
+
+            # load metadata
+            meta_data_df = load.load_meta_data()
+
+            # get muscleban side and remove '_'
+            device = load.get_muscleban_side(meta_data_df, match.group()).replace("_", " ")
+
+        # if it's phone or watch keep the device name as it is
+        else:
+            device = device_raw
+
+        # add device names to dict
+        normalized_acquisitions_dict[device] = data
+
+    return normalized_acquisitions_dict
+
+
+def _get_day_string(date_string, locale_string):
+    """
+    Gets the day as a string (i.e. Mon, Tue, Wednesday, etc.) from a date string in the language of the defined locale
+    :param date_string: the date as string. The date should be in the format (year-month-day)
+    :param locale_string: string indicating the local for returning the day string in a specific language
+    :return: the day of the week as a string
+    """
+    # get a datetime object from the date string
+    date_time = datetime.strptime(date_string, '%Y-%m-%d')
+
+    # set the locale_string
+    locale.setlocale(locale.LC_TIME, locale_string)
+
+    return date_time.strftime('%A'), date_time.strftime('%x')
+
+
+def plot_device_bars(ax, data_dict, device_to_index, fs, color_map, edgecolor=None, linestyle='solid', linewidth=1.0):
+    """
+    Plots horizontal bars for each device based on acquisition or missing data.
+
+    :param ax: The matplotlib axis to draw on.
+    :param data_dict: Dictionary containing acquisition or missing data.
+    :param device_to_index: Mapping from device name to vertical position index.
+    :param fs: Sampling frequency.
+    :param color_map: Function or dict that returns a facecolor given the device index or name.
+    :param edgecolor: Color of bar edge (optional).
+    :param linestyle: Line style for the bar edge (default: solid).
+    :param linewidth: Width of bar edge lines.
+    """
+    for device, data in data_dict.items():
+        if device not in device_to_index:
+            continue
+
+        i = device_to_index[device]
+        y_center = i * VERTICAL_SPACING
+        y_bottom = y_center - BAR_HEIGHT / 2
+
+        for length, start_str in zip(data[LENGTH], data[START_TIMES]):
+            if not start_str:
+                continue
+            start_dt = datetime.strptime(start_str, "%H-%M-%S")
+            duration = timedelta(seconds=length / fs)
+
+            ax.broken_barh(
+                [(start_dt, duration)],
+                (y_bottom, BAR_HEIGHT),
+                facecolors=color_map(i) if callable(color_map) else color_map.get(device, 'gray'),
+                edgecolor=edgecolor,
+                linestyle=linestyle,
+                linewidth=linewidth
+            )
