@@ -16,8 +16,8 @@ import locale
 import load
 from constants import PHONE, WATCH
 from .parser import get_device_filename_timestamp
-from utils import extract_device_num_from_path, extract_group_from_path, extract_date_from_path, \
-    get_most_common_acquisition_times, create_dir
+from utils import extract_device_num_from_path, extract_group_from_path, extract_date_from_path, create_dir
+from .missing_data import get_missing_data
 
 # ------------------------------------------------------------------------------------------------------------------- #
 # file specific constants
@@ -66,7 +66,7 @@ def visualize_daily_acquisitions(subject_folder_path: str, date: str, fs=100) ->
     acquisitions_dict = _get_daily_acquisitions_metadata(subject_folder_path, date)
 
     # Get the missing data, if any
-    missing_data_dict = _get_missing_data(subject_folder_path, acquisitions_dict)
+    missing_data_dict = get_missing_data(subject_folder_path, acquisitions_dict)
 
     # only plot if there's any data
     if acquisitions_dict:
@@ -154,7 +154,7 @@ def visualize_daily_acquisitions(subject_folder_path: str, date: str, fs=100) ->
                         f"{extract_date_from_path(daily_folder_path)}.png")
 
         # generate output path
-        output_path = create_dir(os.getcwd(), f"group_{extract_group_from_path(daily_folder_path)}")
+        output_path = create_dir(os.getcwd(), f"TEST_NEW_group_{extract_group_from_path(daily_folder_path)}")
 
         # save plot
         plt.savefig(os.path.join(output_path, out_filename), dpi=300, bbox_inches='tight')
@@ -271,56 +271,6 @@ def _check_logger_file(folder_path: str) -> bool:
             return True
 
     return False
-
-
-def _get_missing_timestamp(subject_folder_path, acquisition_times_list, tolerance_seconds=300):
-    # Get the most common expected acquisition times for the subject
-    common_times_list = get_most_common_acquisition_times(subject_folder_path)
-
-    # Convert both the expected and actual times to datetime objects
-    acquisition_times_dt = [datetime.strptime(time, "%H-%M-%S") for time in acquisition_times_list]
-    common_times_dt = [datetime.strptime(time, "%H-%M-%S") for time in common_times_list]
-
-    # Initialize list to store missing times
-    missing_times = []
-
-    # For each expected time, check if there is a matching actual time within the tolerance window
-    for common_time in common_times_dt:
-        if not any(abs((common_time - acq_time).total_seconds()) <= tolerance_seconds for acq_time in acquisition_times_dt):
-
-            # If no matching time found within tolerance, consider it missing
-            missing_times.append(common_time.strftime("%H-%M-%S"))
-
-    # Return the set of missing timestamps as strings
-    return set(missing_times)
-
-
-def _get_missing_data(subject_folder_path, acquisitions_dict, fs=100):
-
-    missing_data_dict = {}
-
-    # check if there are missing acquisitions
-    for device, data in acquisitions_dict.items():
-
-        # if any device that is not phone didn't acquire 4 times, then it's missing
-        if  device != PHONE and len(data[START_TIMES]) < 4:
-
-            # get missing timestamps list
-            missing_times_list = _get_missing_timestamp(subject_folder_path, data[START_TIMES])
-
-            # initialize if device not in dict
-            if device not in missing_data_dict:
-                missing_data_dict[device] = {
-                    START_TIMES: [],
-                    LENGTH: []
-                }
-
-            # add missing times and lengths (should be 20 minutes acquisitions)
-            for missing_time in missing_times_list:
-                missing_data_dict[device][START_TIMES].append(missing_time)
-                missing_data_dict[device][LENGTH].append(20 * 60 * fs)
-
-    return missing_data_dict
 
 
 def _normalize_device_names(acquisitions_dict: Dict[str, Any]):

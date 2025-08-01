@@ -1,7 +1,7 @@
 # ------------------------------------------------------------------------------------------------------------------- #
 # imports
 # ------------------------------------------------------------------------------------------------------------------- #
-from typing import Optional
+from typing import Optional, List
 import re
 import os
 from collections import Counter
@@ -75,7 +75,7 @@ def extract_date_from_path(folder_path: str) -> Optional[str]:
         return None
 
 
-def get_most_common_acquisition_times(data_path):
+def get_most_common_acquisition_times(data_path: str) -> List[datetime]:
     """
     retrieves the four most common acquisition times found in all acquisition times for the subjects.
     The acquisition times are found by retrieving all folder names that contain a time that can be found within
@@ -115,7 +115,7 @@ def get_most_common_acquisition_times(data_path):
     # find the most common times (usually 4 due to four acquisitions a day, but could also be less)
     acquisition_times_list = get_most_common_times(acquisition_times_list, adjust_close_times=True)
 
-    return acquisition_times_list
+    return [datetime.strptime(time, "%H-%M-%S") for time in acquisition_times_list]
 
 
 def get_most_common_times(acquisition_times_list, adjust_close_times=False):
