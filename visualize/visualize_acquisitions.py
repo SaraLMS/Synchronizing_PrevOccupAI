@@ -1,3 +1,7 @@
+"""
+
+"""
+
 # ------------------------------------------------------------------------------------------------------------------- #
 # imports
 # ------------------------------------------------------------------------------------------------------------------- #
@@ -154,7 +158,7 @@ def visualize_daily_acquisitions(subject_folder_path: str, date: str, fs=100) ->
                         f"{extract_date_from_path(daily_folder_path)}.png")
 
         # generate output path
-        output_path = create_dir(os.getcwd(), f"TEST_NEW_group_{extract_group_from_path(daily_folder_path)}")
+        output_path = create_dir(os.getcwd(), f"group_{extract_group_from_path(daily_folder_path)}")
 
         # save plot
         plt.savefig(os.path.join(output_path, out_filename), dpi=300, bbox_inches='tight')

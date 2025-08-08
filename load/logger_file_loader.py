@@ -29,6 +29,7 @@ import re
 # internal imports
 from constants import WATCH, PHONE
 from load.parser import extract_device_from_filename
+from visualize.parser import get_device_filename_timestamp
 
 # ------------------------------------------------------------------------------------------------------------------- #
 # file specific constants
@@ -96,6 +97,20 @@ def load_logger_file_info(folder_path: str) -> Optional[Dict[str, str]]:
 
         # get the start time for the device and store in a single entry dictionary
         device_start_times_dict = _get_device_start_time(logger_df, device)
+
+        # check if any of the timestamps was not found - might not be on the logger file
+        # check if any value has ''
+        if any(timestamp == '' for timestamp in device_start_times_dict.values()):
+
+            # get all timestamps from the folder names
+            folder_device_start_times_dict = get_device_filename_timestamp(folder_path)
+
+            # fill in only the missing timestamps (those with '')
+            for device_name, timestamp in device_start_times_dict.items():
+
+                # get the device that has a missing timestamp and fill it with the folder_name timestamp
+                if timestamp == '' and device_name in folder_device_start_times_dict:
+                    device_start_times_dict[device_name] = folder_device_start_times_dict[device_name]
 
         # update dictionary
         start_times_dict.update(device_start_times_dict)
@@ -234,6 +249,10 @@ def _find_android_logger_timestamps(filtered_logger_df: pd.DataFrame, watch: boo
 
         i+=1
 
+    # if the timestamp is not found on the logger file put empty str
+    if not found_device:
+        start_times_dict[device] = ''
+
     return  start_times_dict
 
 
@@ -254,6 +273,8 @@ def _find_mban_logger_timestamps(filtered_logger_df: pd.DataFrame, device: str) 
     :return: A dictionary with one entry: {device: timestamp} where the timestamp is the last occurrence
              of the device’s MAC address in the log.
     """
+    # flag to check if device was found
+    found_device: bool = False
 
     # init dictionary to store the start times for each device
     start_times_dict: Dict[str, str] = {}
@@ -275,6 +296,14 @@ def _find_mban_logger_timestamps(filtered_logger_df: pd.DataFrame, device: str) 
             # Compare to input device
             if mac_stripped == device:
 
+                # update flag
+                found_device = True
+
+                # add timestamp to dict
                 start_times_dict[device] = row[TIMESTAMP]
+
+    # if the timestamp is not found on the logger file put empty str
+    if not found_device:
+        start_times_dict[device] = ''
 
     return start_times_dict

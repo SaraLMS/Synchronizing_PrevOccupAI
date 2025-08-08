@@ -1,4 +1,6 @@
+"""
 
+"""
 
 # ------------------------------------------------------------------------------------------------------------------- #
 # imports
@@ -16,12 +18,13 @@ from utils import get_most_common_acquisition_times
 LENGTH = 'length'
 START_TIMES = 'start_times'
 ACQUISITION_TIME_SECONDS = 20*60 # 20 minute acquisitions
+TIME_FORMAT = "%H-%M-%S"
 # ------------------------------------------------------------------------------------------------------------------- #
 # public functions
 # ------------------------------------------------------------------------------------------------------------------- #
 
 def get_missing_data(subject_folder_path: str, acquisitions_dict: Dict[str, Dict[str, list]], fs: int = 100,
-                     tolerance_seconds: int = 300) -> Dict[str, Dict[str, list]]:
+                     tolerance_seconds: int = 600) -> Dict[str, Dict[str, list]]:
     """
     Identify and return missing data (start_time and length) for each device (except the phone).
 
@@ -94,6 +97,10 @@ def get_missing_data(subject_folder_path: str, acquisitions_dict: Dict[str, Dict
                 # use the averages to get only the timestamps that are missing on both devices
                 missing_times_list.extend(_get_missing_timestamps(average_times_list, temp_list))
 
+                # handle the case where the acquisition time are so mismatched that data[START_TIMES] + missing_times_list > 4
+                if len(data[START_TIMES]) + len(missing_times_list) > 4:
+                    missing_times_list.pop(-1)
+
             # initialize if device not in dict
             if device not in missing_data_dict:
                 missing_data_dict[device] = {
@@ -119,13 +126,13 @@ def _has_close_time(time: datetime, time_list_dt: List[datetime], tolerance_seco
 
 
 def _get_missing_timestamps(unique_timestamps_list: List[datetime], acquisitions_times_list: List[str],
-                            tolerance_seconds=300) -> List[str]:
+                            tolerance_seconds=600) -> List[str]:
 
     # innit list to store the missing times
     missing_times = []
 
     # change the sensor start times to datetime
-    device_timestamp_dt = [datetime.strptime(timestamp, "%H-%M-%S") for timestamp in acquisitions_times_list]
+    device_timestamp_dt = [datetime.strptime(timestamp, TIME_FORMAT) for timestamp in acquisitions_times_list]
 
     # iterate through the unique timestamps
     for timestamp in unique_timestamps_list:
@@ -134,7 +141,7 @@ def _get_missing_timestamps(unique_timestamps_list: List[datetime], acquisitions
         if not _has_close_time(timestamp,device_timestamp_dt, tolerance_seconds):
 
             # add to the list with missing times in the correct format
-            missing_times.append(timestamp.strftime("%H-%M-%S"))
+            missing_times.append(timestamp.strftime(TIME_FORMAT))
 
     return missing_times
 
@@ -151,7 +158,7 @@ def _find_unique_timestamps(acquisitions_dict: Dict[str, Dict[str, list]], toler
             continue
 
         # change to datetime objects to perform mathematics
-        acquisition_times_dt = [datetime.strptime(time, "%H-%M-%S") for time in data[START_TIMES]]
+        acquisition_times_dt = [datetime.strptime(time, TIME_FORMAT) for time in data[START_TIMES]]
         all_daily_timestamps.extend(acquisition_times_dt)
 
     # since these devices don't start exactly at the same time, remove the timestamps that are very similar based on tolerance_seconds

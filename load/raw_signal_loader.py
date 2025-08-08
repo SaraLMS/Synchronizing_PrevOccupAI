@@ -252,7 +252,7 @@ def _clean_df(sensor_df: pd.DataFrame) -> pd.DataFrame:
     return sensor_df
 
 
-def _remove_non_unit_quaternion(rotvec_df: pd.DataFrame, tol: float = 0.1) -> pd.DataFrame:
+def _remove_non_unit_quaternion(rotvec_df: pd.DataFrame, tol: float = 0.5) -> pd.DataFrame:
     """
     Remove corrupted samples from a DataFrame containing Android rotation vector data.
     Android rotation vector data are expected to be unit quaternions (i.e., their norm should be close to 1).

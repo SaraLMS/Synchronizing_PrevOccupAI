@@ -78,13 +78,13 @@ def _extract_timestamp_from_filename(filename: str) -> str:
     :return: The timestamp in the 'hh:mm:ss.000' format
     """
     # Regex to extract the timestamp from filename - format is hh-mm-ss
-    match = re.search(r'_(\d{2}-\d{2}-\d{2})$', filename)
+    match = re.search(r'_(\d{2}-\d{2}-\d{2})(?:\.\w+)?$', filename)
 
     if not match:
         raise ValueError(f"No valid time found in filename: {filename}")
 
     # Change format to hh:mm:ss.000
-    time_str = match.group(1).replace('-', ':') + ".000"
+    time_str = match.group(1)
 
     return time_str
 

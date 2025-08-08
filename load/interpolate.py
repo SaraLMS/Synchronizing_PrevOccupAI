@@ -188,11 +188,15 @@ def interpolate_heart_rate_sensor(sensor_df: pd.DataFrame, fs: int = 100) -> pd.
     # cycle over the start and stop indices
     for start, stop in zip(start_indices, stop_indices):
 
-        # get the segment of the HR sensor
-        hr_segment_df = sensor_df.iloc[start:stop]
+        # get the segment of the HR sensor (+1 to include the stop)
+        hr_segment_df = sensor_df.iloc[start:stop+1]
 
-        # get only the segment of the full tima axis
-        time_axis_segment = time_axis[start:stop]
+        # get only the segment of the full tima axis (+1 to include the stop)
+        time_axis_segment = time_axis[start:stop+1]
+
+        # if segments have less than 2 samples, can not interpolate
+        if len(hr_segment_df) < 2:
+            continue
 
         # define the new time axis
         time_axis_inter = np.arange(time_axis_segment[0], time_axis_segment[-1], 1 / fs)

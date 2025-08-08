@@ -28,7 +28,7 @@ from constants import WATCH, PHONE, ANDROID, ANDROID_WEAR, AVAILABLE_ANDROID_PRE
 # ------------------------------------------------------------------------------------------------------------------- #
 # file specific constants
 # ------------------------------------------------------------------------------------------------------------------- #
-MIN_BYTES = 1000
+MIN_BYTES = 1500
 
 # ------------------------------------------------------------------------------------------------------------------- #
 # public functions
@@ -67,7 +67,7 @@ def get_file_paths_by_device(folder_path: Union[str, os.PathLike]) -> Dict[str, 
     for filename in files:
 
         # If less than 1 kb than it's either empty or only has the header - ignore
-        if os.path.getsize(os.path.join(folder_path, filename)) < MIN_BYTES:
+        if os.path.getsize(os.path.join(folder_path, filename)) <= MIN_BYTES:
             continue
 
         # check the device based on the filename
