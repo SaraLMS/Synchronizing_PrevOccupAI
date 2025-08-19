@@ -9,7 +9,7 @@ from typing import Dict, List
 from datetime import datetime
 
 # internal imports
-from constants import PHONE
+from constants import PHONE, ACQUISITION_TIME_SECONDS
 from utils import get_most_common_acquisition_times
 
 # ------------------------------------------------------------------------------------------------------------------- #
@@ -17,7 +17,6 @@ from utils import get_most_common_acquisition_times
 # ------------------------------------------------------------------------------------------------------------------- #
 LENGTH = 'length'
 START_TIMES = 'start_times'
-ACQUISITION_TIME_SECONDS = 20*60 # 20 minute acquisitions
 TIME_FORMAT = "%H-%M-%S"
 # ------------------------------------------------------------------------------------------------------------------- #
 # public functions

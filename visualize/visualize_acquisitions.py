@@ -8,7 +8,7 @@
 import os
 import glob
 import pandas as pd
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 from matplotlib.dates import DateFormatter
@@ -18,7 +18,7 @@ import locale
 
 # internal imports
 import load
-from constants import PHONE, WATCH
+from constants import PHONE, WATCH, ACQUISITION_TIME_SECONDS
 from .parser import get_device_filename_timestamp
 from utils import extract_device_num_from_path, extract_group_from_path, extract_date_from_path, create_dir
 from .missing_data import get_missing_data
@@ -42,7 +42,13 @@ BAR_HEIGHT = 0.1
 # ------------------------------------------------------------------------------------------------------------------- #
 
 def visualize_group_acquisitions(group_folder_path, fs=100) -> None:
+    """
+    Generates a plot with the daily acquisitions for each device and for each subject of the group.
 
+    :param group_folder_path: Path to the folder containing all subjects' data from the group
+    :param fs: the sampling frequency (default = 100 Hz)
+    :return: None
+    """
     # iterate through the subjects in the group
     for subject_folder in os.listdir(group_folder_path):
 
@@ -59,11 +65,13 @@ def visualize_group_acquisitions(group_folder_path, fs=100) -> None:
 
 def visualize_daily_acquisitions(subject_folder_path: str, date: str, fs=100) -> None:
     """
-    Visualizes daily signal acquisitions per device as horizontal bars over a timeline.
+    Visualizes daily signal acquisitions per subject as horizontal bars over a timeline, including missing acquisitions.
+    The plot is saved as a PNG file.
 
     :param subject_folder_path: Path to the subject's folder.
     :param date: Date string (YYYY-MM-DD) of the acquisitions to visualize.
     :param fs: Sampling frequency (default 100 Hz).
+    :return: None
     """
 
     # Get the dictionary with the lengths and start times
@@ -90,6 +98,12 @@ def visualize_daily_acquisitions(subject_folder_path: str, date: str, fs=100) ->
         # change muscleban device name to mBAN right or mBAN left from the dict with the acquisition data
         missing_data_dict = _normalize_device_names(missing_data_dict)
 
+        # if acquisitions dict only has 3 items, then one device was missing for the entire day
+        if len(acquisitions_dict) < 4:
+
+            # add missing device to missing_data_dict
+            missing_data_dict = add_missing_device(acquisitions_dict, missing_data_dict, fs=fs)
+
         # Loop over both dictionaries to find time range first to start and last to end acquiring
         for data_dict in (acquisitions_dict, missing_data_dict):
             for data in data_dict.values():
@@ -105,13 +119,18 @@ def visualize_daily_acquisitions(subject_folder_path: str, date: str, fs=100) ->
                     if latest_end_time is None or end_dt > latest_end_time:
                         latest_end_time = end_dt
 
-        # create a sorted dictionary according to DEVICE_ORDER
+        # Sort acquisitions_dict according to DEVICE_ORDER
         acquisitions_dict = {
             d: acquisitions_dict[d]
-            for d in sorted(acquisitions_dict.keys(), key=lambda d: DEVICE_ORDER.index(d) if d in DEVICE_ORDER else len(DEVICE_ORDER))
+            for d in sorted(acquisitions_dict.keys(),
+                            key=lambda d: DEVICE_ORDER.index(d) if d in DEVICE_ORDER else len(DEVICE_ORDER))
         }
 
-        device_to_index = {device: i for i, device in enumerate(acquisitions_dict.keys())}
+        # Build device_to_index from the union of acquisitions + missing devices
+        all_devices = set(acquisitions_dict.keys()) | set(missing_data_dict.keys())
+        sorted_devices = sorted(all_devices,
+                                key=lambda d: DEVICE_ORDER.index(d) if d in DEVICE_ORDER else len(DEVICE_ORDER))
+        device_to_index = {device: i for i, device in enumerate(sorted_devices)}
 
         fig, ax = plt.subplots(figsize=(10, 3))
 
@@ -314,6 +333,53 @@ def _get_day_string(date_string, locale_string):
     locale.setlocale(locale.LC_TIME, locale_string)
 
     return date_time.strftime('%A'), date_time.strftime('%x')
+
+
+def add_missing_device(data_dict, missing_data_dict, fs):
+
+    # variable for holding the device to be used as reference for getting the start times
+    ref_device: Optional[str] = None
+
+    # find the devices that are present
+    present_devices = set(data_dict.keys()) | set(missing_data_dict.keys())
+
+    # find the missing devices - except phone
+    missing_devices = list((set(DEVICE_ORDER) - {PHONE}) - present_devices)
+
+    # if watch and both muscleBANS are missing, raise error as it is no possible to get timestamps
+    if len(missing_devices) == 3:
+        raise ValueError("All 3 devices (watch + both mBANs) are missing. Cannot infer missing acquisitions.")
+
+    # get the reference device from the dictionary with the data
+    for device in DEVICE_ORDER:
+
+        if device != PHONE and device in data_dict:
+
+            # get reference device
+            ref_device = device
+            break
+
+    if ref_device is None:
+
+        # This scenario does not occur, written for code completion
+        return missing_data_dict
+
+    # (3) Collect reference times. If the device that was used for reference has no missing start times, use the ones in data_dict.
+    ref_times = data_dict[ref_device][START_TIMES].copy()
+
+    # If the reference device has missing start times, merge the ones on both data_dict and missing_data_dict
+    if ref_device in missing_data_dict:
+        ref_times += missing_data_dict[ref_device][START_TIMES]
+
+    # (4) Add missing devices data to missing_data_dict, including the length of the acquisitions
+    for dev in missing_devices:
+
+        missing_data_dict[dev] = {
+            START_TIMES: sorted(ref_times),
+            LENGTH: [ACQUISITION_TIME_SECONDS * fs] * len(ref_times)
+        }
+
+    return missing_data_dict
 
 
 def plot_device_bars(ax, data_dict, device_to_index, fs, color_map, edgecolor=None, linestyle='solid', linewidth=1.0):

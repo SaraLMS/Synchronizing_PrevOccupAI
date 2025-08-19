@@ -34,6 +34,7 @@ AVAILABLE_ANDROID_SENSORS = [ACC, GYR, MAG, HEART, ROT, NOISE]
 # definition of time column
 TIME_COLUMN_NAME = 't'
 
+ACQUISITION_TIME_SECONDS = 20*60 # 20 minute acquisitions
 # ------------------------------------------------------------------------------------------------------------------- #
 # MuscleBan constants
 # ------------------------------------------------------------------------------------------------------------------- #
