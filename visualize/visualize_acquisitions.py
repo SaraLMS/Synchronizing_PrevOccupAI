@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 
 """
@@ -18,10 +19,11 @@ import locale
 
 # internal imports
 import load
-from constants import PHONE, WATCH, ACQUISITION_TIME_SECONDS
+from constants import PHONE, WATCH, ACQUISITION_TIME_SECONDS, MBAN_RIGHT, MBAN_LEFT
 from .parser import get_device_filename_timestamp
 from utils import extract_device_num_from_path, extract_group_from_path, extract_date_from_path, create_dir
 from .missing_data import get_missing_data
+from .legend_handlers import RefLine, HandlerRefLine
 
 # ------------------------------------------------------------------------------------------------------------------- #
 # file specific constants
@@ -31,9 +33,14 @@ LENGTH = 'length'
 START_TIMES = 'start_times'
 COLOR_PALLETE = ['#f2b36f', "#F07A15", '#4D92D0', '#3C787E']
 
-MBAN_LEFT = 'mBAN left'
-MBAN_RIGHT = 'mBAN right'
-DEVICE_ORDER = [MBAN_LEFT, MBAN_RIGHT, WATCH,PHONE]
+SMARTPHONE = 'Smartphone'
+SMARTWATCH = 'Smartwatch'
+MBAN_ESQ = "mBAN esq"
+MBAN_DIR = "mBAN dir"
+DEVICE_ORDER = [MBAN_ESQ, MBAN_DIR, SMARTWATCH,SMARTPHONE]
+REF_DEVICES = [SMARTWATCH, MBAN_DIR, MBAN_ESQ]
+SMART = 'Smart'
+
 
 VERTICAL_SPACING = 0.2
 BAR_HEIGHT = 0.1
@@ -139,7 +146,10 @@ def visualize_daily_acquisitions(subject_folder_path: str, date: str, fs=100) ->
 
         # Plot missing data horizontal bars
         plot_device_bars(ax=ax,data_dict=missing_data_dict,device_to_index=device_to_index,fs=fs,color_map=lambda _: 'lightgray',
-                         edgecolor='black',linestyle='dashed',linewidth=0.8)
+                         edgecolor='#06171C',linestyle='dashed',linewidth=0.8)
+
+        #Add reference acquisition line (20 minutes)
+        plot_reference_acquisition(ax, acquisitions_dict, missing_data_dict, device_to_index, seconds=20*60)
 
         # Add labels and dashed horizontal lines
         for device, i in device_to_index.items():
@@ -159,16 +169,28 @@ def visualize_daily_acquisitions(subject_folder_path: str, date: str, fs=100) ->
         for spine in ['top', 'right', 'left', 'bottom']:
             ax.spines[spine].set_visible(False)
 
-        ax.set_xlabel("Time (hh:mm)", color='#06171C')
+        ax.set_xlabel("Tempo (hh:mm)", color='#06171C')
         ax.set_yticks([])
 
-        week_day, date = _get_day_string(extract_date_from_path(daily_folder_path), locale_string= 'pt_PT.UTF-8')
+        week_day, date = _get_day_string(extract_date_from_path(daily_folder_path))
 
         ax.set_title(f"{week_day} | {date}", color='#06171C')
 
         # Add legend for missing data
-        missing_patch = Patch(facecolor='lightgray', edgecolor='black', linestyle='dashed', label='Missing data')
-        ax.legend(handles=[missing_patch], loc='upper left', bbox_to_anchor=(1.02, 1.02), frameon=False, handleheight=2.5, handlelength=2)
+        missing_patch = Patch(facecolor='lightgray', edgecolor='black', linestyle='dashed', label='Sem dados')
+        # ax.legend(handles=[missing_patch], loc='upper left', bbox_to_anchor=(1.02, 1.02), frameon=False, handleheight=2.5, handlelength=2)
+
+        ax.legend(
+            handles=[missing_patch, RefLine()],
+            labels=["Sem dados", f"{ACQUISITION_TIME_SECONDS // 60} minutos"],
+            handler_map={RefLine: HandlerRefLine()},
+            loc='upper left',
+            bbox_to_anchor=(1.02, 1.02),
+            frameon=False,
+            handleheight=1,
+            handlelength=2,
+            borderaxespad=0.5
+        )
 
         plt.tight_layout()
 
@@ -300,6 +322,7 @@ def _normalize_device_names(acquisitions_dict: Dict[str, Any]):
     # change muscleban device name to mBAN right or mBAN left
     normalized_acquisitions_dict = {}
 
+    # cycle over the devices in the dictionary keys
     for device_raw, data in acquisitions_dict.items():
         if match := re.search(r'[A-Z0-9]{12}', device_raw):
 
@@ -307,11 +330,18 @@ def _normalize_device_names(acquisitions_dict: Dict[str, Any]):
             meta_data_df = load.load_meta_data()
 
             # get muscleban side and remove '_'
-            device = load.get_muscleban_side(meta_data_df, match.group()).replace("_", " ")
+            device = load.get_muscleban_side(meta_data_df, match.group())
+
+            # translate to portuguese
+            if device == MBAN_RIGHT:
+                device = MBAN_DIR
+
+            else:
+                device = MBAN_ESQ
 
         # if it's phone or watch keep the device name as it is
         else:
-            device = device_raw
+            device = SMART + device_raw
 
         # add device names to dict
         normalized_acquisitions_dict[device] = data
@@ -319,7 +349,7 @@ def _normalize_device_names(acquisitions_dict: Dict[str, Any]):
     return normalized_acquisitions_dict
 
 
-def _get_day_string(date_string, locale_string):
+def _get_day_string(date_string, locale_string="Portuguese_Portugal.1252"):
     """
     Gets the day as a string (i.e. Mon, Tue, Wednesday, etc.) from a date string in the language of the defined locale
     :param date_string: the date as string. The date should be in the format (year-month-day)
@@ -417,3 +447,45 @@ def plot_device_bars(ax, data_dict, device_to_index, fs, color_map, edgecolor=No
                 linestyle=linestyle,
                 linewidth=linewidth
             )
+
+
+def plot_reference_acquisition(ax, acquisitions_dict, missing_data_dict, device_to_index, seconds: int = 20*60) -> None:
+    """
+    Plots a reference acquisition line (e.g., 20 minutes) on the first available acquisition
+    from one of the devices (watch, mBAN right, or mBAN left).
+
+    :param ax: The matplotlib axis to draw on.
+    :param acquisitions_dict: Dictionary of acquisitions with start times and lengths.
+    :param device_to_index: Mapping from device name to vertical index for plotting.
+    :param seconds: Duration of the reference acquisition in seconds (default: 20 minutes).
+    """
+    # select the watch to be the bar where the line will be
+    ref_device = SMARTWATCH
+
+    # Try acquisitions first, fallback to missing data
+    data_dict = acquisitions_dict.get(ref_device) or missing_data_dict.get(ref_device)
+
+    # First chunk
+    start_str = data_dict[START_TIMES][0]
+    start_dt = datetime.strptime(start_str, "%H-%M-%S")
+    end_dt = start_dt + timedelta(seconds=seconds)
+
+    # Position above bar
+    y_top = device_to_index[ref_device] * VERTICAL_SPACING + BAR_HEIGHT / 2
+    offset = 0.1 * BAR_HEIGHT
+    y_line = y_top + offset
+
+    # Draw a double-headed arrow with vertical ticks
+    ax.annotate(
+        "",
+        xy=(end_dt, y_line), xycoords="data",
+        xytext=(start_dt, y_line), textcoords="data",
+        arrowprops=dict(
+            arrowstyle="|-|",
+            shrinkA=0, shrinkB=0,
+            color="#26373C",
+            linewidth=2,
+            mutation_scale=2
+        )
+    )
+

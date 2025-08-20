@@ -11,7 +11,7 @@ if __name__ == '__main__':
     # visualize_group_acquisitions(group_folder_path)
 
     subject_folder_path = "D:\\Backup PrevOccupAI data\\jan2023\\data\\group4\\sensors\\LIBPhys #011"
-    date = '2022-07-20j'
+    date = '2022-07-21'
     visualize_daily_acquisitions(subject_folder_path, date)
 
     # acquisitions_dict = _get_daily_acquisitions_metadata(subject_folder_path, date)

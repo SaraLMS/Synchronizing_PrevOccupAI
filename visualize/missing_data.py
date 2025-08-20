@@ -9,7 +9,7 @@ from typing import Dict, List
 from datetime import datetime
 
 # internal imports
-from constants import PHONE, ACQUISITION_TIME_SECONDS
+from constants import PHONE, ACQUISITION_TIME_SECONDS, MBAN_LEFT, MBAN_RIGHT
 from utils import get_most_common_acquisition_times
 
 # ------------------------------------------------------------------------------------------------------------------- #
