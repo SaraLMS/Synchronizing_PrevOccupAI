@@ -1,21 +1,33 @@
+# ------------------------------------------------------------------------------------------------------------------- #
+# imports
+# ------------------------------------------------------------------------------------------------------------------- #
 import load
 import os
-from utils import get_most_common_acquisition_times
-from visualize.missing_data import get_missing_data
-from visualize.visualize_acquisitions import visualize_daily_acquisitions, visualize_group_acquisitions, \
-    _get_daily_acquisitions_metadata
+from visualize.visualize_acquisitions import visualize_daily_acquisitions, visualize_group_acquisitions
+
+# ------------------------------------------------------------------------------------------------------------------- #
+# constants
+# ------------------------------------------------------------------------------------------------------------------- #
+VISUALIZE_DAY = True
+VISUALIZE_GROUP = False
+
+GROUP_FOLDER_PATH = "D:\\Backup PrevOccupAI data\\jan2023\\data\\group4\\sensors"
+SUBJECT_NUM = "LIBPhys #011"
+DATE = "2022-07-21"
+# ------------------------------------------------------------------------------------------------------------------- #
+# program starts here
+# ------------------------------------------------------------------------------------------------------------------- #
 
 if __name__ == '__main__':
 
-    # group_folder_path = "D:\\Backup PrevOccupAI data\\jan2023\\data\\group1\\sensors"
-    # visualize_group_acquisitions(group_folder_path)
+    # visualize the acquisitions of a single day
+    if VISUALIZE_DAY:
 
-    subject_folder_path = "D:\\Backup PrevOccupAI data\\jan2023\\data\\group4\\sensors\\LIBPhys #011"
-    date = '2022-07-21'
-    visualize_daily_acquisitions(subject_folder_path, date)
+        visualize_daily_acquisitions(os.path.join(GROUP_FOLDER_PATH, SUBJECT_NUM), DATE)
 
-    # acquisitions_dict = _get_daily_acquisitions_metadata(subject_folder_path, date)
-    #
-    # missing_data_dict = get_missing_data(subject_folder_path, acquisitions_dict, 100, 300)
-    #
+    # visualize all daily acquisitions from all subject of the group
+    if VISUALIZE_GROUP:
+
+        visualize_group_acquisitions(GROUP_FOLDER_PATH)
+
     # data_dict = load.load_data_from_same_recording(os.path.join(subject_folder_path, date, '14-40-00'))

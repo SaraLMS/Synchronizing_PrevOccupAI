@@ -1,13 +1,25 @@
+"""
+Functions to extract device start times from filenames.
+
+Available Functions
+-------------------
+[Public]
+get_device_filename_timestamp(...): Scan a folder of raw data files, extract device names and their start times from filenames, and return them as a dictionary.
+-------------------
+
+[Private]
+_extract_timestamp_from_filename(...): Parse the timestamp from an OpenSignals-style filename and convert it to 'hh:mm:ss.000' format.
+"""
+
 # ------------------------------------------------------------------------------------------------------------------- #
 # imports
 # ------------------------------------------------------------------------------------------------------------------- #
 import os
-from typing import Dict, List
+from typing import Dict
 import re
 
 # internal imports
 import load
-from utils import extract_group_from_path, extract_device_num_from_path
 
 
 # ------------------------------------------------------------------------------------------------------------------- #
@@ -44,23 +56,6 @@ def get_device_filename_timestamp(folder_path: str) -> Dict[str, str]:
 
     return start_times_dict
 
-
-def get_missing_devices(folder_path: str, list_devices: List[str]) -> List[str]:
-
-    # load metadata df
-    meta_data_df = load.load_meta_data()
-
-    # extract group number and device number from folder path - subject identifiers
-    group_num = extract_group_from_path(folder_path)
-    device_num = extract_device_num_from_path(folder_path)
-
-    # get expected devices for the subject
-    expected_devices = load.get_expected_devices(meta_data_df, group_num, device_num)
-
-    # check which devices are missing
-    missing_devices = [device for device in expected_devices if device not in list_devices]
-
-    return missing_devices
 
 # ------------------------------------------------------------------------------------------------------------------- #
 # private functions

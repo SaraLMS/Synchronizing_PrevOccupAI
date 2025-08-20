@@ -1,6 +1,26 @@
 # -*- coding: utf-8 -*-
 """
+Functions to visualize daily and group-level sensor acquisitions.
 
+Available Functions
+-------------------
+[Public]
+visualize_group_acquisitions(...): Generate daily acquisition plots for each subject in a group.
+visualize_daily_acquisitions(...): Plot acquisitions for a subject on a given day, including missing data, and save the visualization as a PNG file.
+-------------------
+
+[Private]
+_get_daily_acquisitions_metadata(...): Aggregate acquisition lengths and start times for all devices on a given day.
+_calculate_df_length(...): Compute the number of rows in each DataFrame of signals.
+_check_logger_file(...): Verify if a logger file exists (and is non-empty) in a given folder.
+_normalize_device_names(...): Translate raw device names into human-readable labels (Portuguese).
+_get_day_string(...): Convert a date string into weekday and formatted date string in the specified locale.
+_add_missing_device(...): Add a device missing for the entire day into the missing-data dictionary using a reference device.
+_get_acquisition_time_range(...): Determine earliest and latest acquisition times across devices.
+_plot_device_bars(...): Draw horizontal bars for each device’s acquisitions or missing data on a timeline.
+_plot_reference_acquisition(...): Plot a reference duration line (e.g., 20 min) on top of acquisitions.
+_plot_device_labels_and_guides(...): Plot device labels and dashed guidelines for visual clarity.
+-------------------
 """
 
 # ------------------------------------------------------------------------------------------------------------------- #
@@ -9,9 +29,10 @@
 import os
 import glob
 import pandas as pd
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple, Union, Callable
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
+from matplotlib.axes import Axes
 from matplotlib.dates import DateFormatter
 from matplotlib.patches import Patch
 import re
@@ -19,7 +40,7 @@ import locale
 
 # internal imports
 import load
-from constants import PHONE, WATCH, ACQUISITION_TIME_SECONDS, MBAN_RIGHT, MBAN_LEFT
+from constants import ACQUISITION_TIME_SECONDS, MBAN_RIGHT
 from .parser import get_device_filename_timestamp
 from utils import extract_device_num_from_path, extract_group_from_path, extract_date_from_path, create_dir
 from .missing_data import get_missing_data
@@ -41,14 +62,13 @@ DEVICE_ORDER = [MBAN_ESQ, MBAN_DIR, SMARTWATCH,SMARTPHONE]
 REF_DEVICES = [SMARTWATCH, MBAN_DIR, MBAN_ESQ]
 SMART = 'Smart'
 
-
 VERTICAL_SPACING = 0.2
 BAR_HEIGHT = 0.1
 # ------------------------------------------------------------------------------------------------------------------- #
 # public functions
 # ------------------------------------------------------------------------------------------------------------------- #
 
-def visualize_group_acquisitions(group_folder_path, fs=100) -> None:
+def visualize_group_acquisitions(group_folder_path: str, fs=100) -> None:
     """
     Generates a plot with the daily acquisitions for each device and for each subject of the group.
 
@@ -93,12 +113,6 @@ def visualize_daily_acquisitions(subject_folder_path: str, date: str, fs=100) ->
         # get full daily path
         daily_folder_path = os.path.join(subject_folder_path, date)
 
-        # variable to hold the earliest timestamp among all device acquisitions
-        min_start_time = None
-
-        # variable to hold the last end time among all device acquisitions - to define the right boundary of the bar
-        latest_end_time = None
-
         # change muscleban device name to mBAN right or mBAN left from the dict with the acquisition data
         acquisitions_dict = _normalize_device_names(acquisitions_dict)
 
@@ -109,22 +123,10 @@ def visualize_daily_acquisitions(subject_folder_path: str, date: str, fs=100) ->
         if len(acquisitions_dict) < 4:
 
             # add missing device to missing_data_dict
-            missing_data_dict = add_missing_device(acquisitions_dict, missing_data_dict, fs=fs)
+            missing_data_dict = _add_missing_device(acquisitions_dict, missing_data_dict, fs=fs)
 
-        # Loop over both dictionaries to find time range first to start and last to end acquiring
-        for data_dict in (acquisitions_dict, missing_data_dict):
-            for data in data_dict.values():
-                for length, start_str in zip(data[LENGTH], data[START_TIMES]):
-                    start_dt = datetime.strptime(start_str, "%H-%M-%S")
-                    end_dt = start_dt + timedelta(seconds=length / fs)
-
-                    # get the earliest timestamp
-                    if min_start_time is None or start_dt < min_start_time:
-                        min_start_time = start_dt
-
-                    # get the latest timestamp
-                    if latest_end_time is None or end_dt > latest_end_time:
-                        latest_end_time = end_dt
+        # get the minimum and maximum time ranges (datetime) to put the chunks in order and for the x-axis limits
+        min_start_time, latest_end_time = _get_acquisition_time_range(acquisitions_dict, missing_data_dict, fs)
 
         # Sort acquisitions_dict according to DEVICE_ORDER
         acquisitions_dict = {
@@ -142,26 +144,19 @@ def visualize_daily_acquisitions(subject_folder_path: str, date: str, fs=100) ->
         fig, ax = plt.subplots(figsize=(10, 3))
 
         # Plot acquisitions horizontal bars
-        plot_device_bars(ax=ax,data_dict=acquisitions_dict,device_to_index=device_to_index,fs=fs,color_map=lambda i: COLOR_PALLETE[i % len(COLOR_PALLETE)],)
+        _plot_device_bars(ax=ax, data_dict=acquisitions_dict, device_to_index=device_to_index, fs=fs, color_map=lambda i: COLOR_PALLETE[i % len(COLOR_PALLETE)], )
 
         # Plot missing data horizontal bars
-        plot_device_bars(ax=ax,data_dict=missing_data_dict,device_to_index=device_to_index,fs=fs,color_map=lambda _: 'lightgray',
-                         edgecolor='#06171C',linestyle='dashed',linewidth=0.8)
+        _plot_device_bars(ax=ax, data_dict=missing_data_dict, device_to_index=device_to_index, fs=fs, color_map=lambda _: 'lightgray',
+                          edgecolor='#06171C', linestyle='dashed', linewidth=0.8)
 
         #Add reference acquisition line (20 minutes)
-        plot_reference_acquisition(ax, acquisitions_dict, missing_data_dict, device_to_index, seconds=20*60)
+        _plot_reference_acquisition(ax, acquisitions_dict, missing_data_dict, device_to_index, seconds=20 * 60)
 
-        # Add labels and dashed horizontal lines
-        for device, i in device_to_index.items():
-            y_center = i * VERTICAL_SPACING
-            y_bottom = y_center - BAR_HEIGHT / 2
-            y_top = y_center + BAR_HEIGHT / 2
+        # plot the dashed guidelines
+        _plot_device_labels_and_guides(ax, device_to_index, min_start_time, latest_end_time)
 
-            ax.hlines(y=[y_bottom, y_top],xmin=min_start_time,xmax=latest_end_time + timedelta(seconds=5),colors="#06171C",linestyles="dashed",linewidth=1.1)
-
-            ax.text(min_start_time - timedelta(seconds=500), y_center, device, va='center', ha='right', fontsize=12, color='#06171C')
-
-        # Formatting
+        # Format the time
         ax.xaxis.set_major_formatter(DateFormatter("%H:%M"))
         ax.set_xlim(min_start_time, latest_end_time + timedelta(seconds=5))
 
@@ -169,28 +164,20 @@ def visualize_daily_acquisitions(subject_folder_path: str, date: str, fs=100) ->
         for spine in ['top', 'right', 'left', 'bottom']:
             ax.spines[spine].set_visible(False)
 
+        # add labels to the x-axis and remove the ticks in the y-axis
         ax.set_xlabel("Tempo (hh:mm)", color='#06171C')
         ax.set_yticks([])
 
+        # get the weekday based on the date - portuguese
         week_day, date = _get_day_string(extract_date_from_path(daily_folder_path))
-
         ax.set_title(f"{week_day} | {date}", color='#06171C')
 
         # Add legend for missing data
         missing_patch = Patch(facecolor='lightgray', edgecolor='black', linestyle='dashed', label='Sem dados')
-        # ax.legend(handles=[missing_patch], loc='upper left', bbox_to_anchor=(1.02, 1.02), frameon=False, handleheight=2.5, handlelength=2)
 
-        ax.legend(
-            handles=[missing_patch, RefLine()],
-            labels=["Sem dados", f"{ACQUISITION_TIME_SECONDS // 60} minutos"],
-            handler_map={RefLine: HandlerRefLine()},
-            loc='upper left',
-            bbox_to_anchor=(1.02, 1.02),
-            frameon=False,
-            handleheight=1,
-            handlelength=2,
-            borderaxespad=0.5
-        )
+        ax.legend(handles=[missing_patch, RefLine()], labels=["Sem dados", f"{ACQUISITION_TIME_SECONDS // 60} minutos"],
+            handler_map={RefLine: HandlerRefLine()}, loc='upper left', bbox_to_anchor=(1.02, 1.02), frameon=False,
+            handleheight=1, handlelength=2, borderaxespad=0.5)
 
         plt.tight_layout()
 
@@ -221,7 +208,8 @@ def _get_daily_acquisitions_metadata(subject_folder_path: str, date: str) -> Dic
         - Determines the start timestamp for each device (using the logger file if available, if not use the filenames).
         - Accumulates these values into a dictionary grouped by device.
 
-    :param daily_folder_path: Path to the folder containing all acquisitions for a single the day
+    :param subject_folder_path: Path to the folder containing all data from one subject
+    :param date: String pertaining to the date of the acquisition (name of the folder)
     :return: A dictionary where keys are device names, and values are dictionaries with two lists:
              - 'length': List of signal lengths.
              - 'start_times': List of corresponding start timestamps.
@@ -318,9 +306,16 @@ def _check_logger_file(folder_path: str) -> bool:
     return False
 
 
-def _normalize_device_names(acquisitions_dict: Dict[str, Any]):
+def _normalize_device_names(acquisitions_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Normalize the keys in the dictionary, which pertains to the device names, for more user-friendly names in portuguese.
+
+    (phone -> Smartphone, watch -> Smartwatch, mBAN left -> mBAN esq, mBAN right -> mBAN dir)
+    :param acquisitions_dict: A dictionary where the keys are the device names
+    :return: The same dictionary with the normalized device names (keys)
+    """
     # change muscleban device name to mBAN right or mBAN left
-    normalized_acquisitions_dict = {}
+    normalized_acquisitions_dict: Dict[str, Any] = {}
 
     # cycle over the devices in the dictionary keys
     for device_raw, data in acquisitions_dict.items():
@@ -349,7 +344,7 @@ def _normalize_device_names(acquisitions_dict: Dict[str, Any]):
     return normalized_acquisitions_dict
 
 
-def _get_day_string(date_string, locale_string="Portuguese_Portugal.1252"):
+def _get_day_string(date_string: str, locale_string: str = "Portuguese_Portugal.1252") -> Tuple[str, str]:
     """
     Gets the day as a string (i.e. Mon, Tue, Wednesday, etc.) from a date string in the language of the defined locale
     :param date_string: the date as string. The date should be in the format (year-month-day)
@@ -365,7 +360,33 @@ def _get_day_string(date_string, locale_string="Portuguese_Portugal.1252"):
     return date_time.strftime('%A'), date_time.strftime('%x')
 
 
-def add_missing_device(data_dict, missing_data_dict, fs):
+def _add_missing_device(data_dict: Dict[str, Dict[str, list]], missing_data_dict: Dict[str, Dict[str, list]], fs: int) \
+        -> Dict[str, Dict[str, list]]:
+    """
+    Adds a device that did not acquire for the entire day to the missing_data_dict. This function:
+
+    (1) goes over the devices in data_dict and finds one device that can be used as reference
+    (watch, mBAN right, or mBAN left)
+
+    (2) gets the timestamps of this reference device. If this device has missing acquisitions, gets the missing
+    timestamps from the missing_data_dict.
+
+    (3) all timestamps found will be used for the missing device, therefore these are added to the missing_data_dict,
+    as well as, for each added timestamp, a length of 20 minutes (20*60*fs) is added.
+
+    :param data_dict: A dictionary where keys are device names, and values are dictionaries with two lists:
+             - 'length': List of signal lengths.
+             - 'start_times': List of corresponding start timestamps.
+             Example:
+             {
+                 "phone": {"length": [10000], "start_times": ["11:20:20.000"]},
+                 "watch": {"length": [500, 950], "start_times": ["10:20:50.000", "12:00:00.000"]}
+             }
+    :param missing_data_dict: A dictionary where keys are device names, and values are dictionaries with two lists: length and start times
+                                Same format as data_dict.
+    :param fs:  the sampling frequency in Hz
+    :return: the missing_data_dict with the missing device (and correspondent start times and length) added.
+    """
 
     # variable for holding the device to be used as reference for getting the start times
     ref_device: Optional[str] = None
@@ -374,16 +395,16 @@ def add_missing_device(data_dict, missing_data_dict, fs):
     present_devices = set(data_dict.keys()) | set(missing_data_dict.keys())
 
     # find the missing devices - except phone
-    missing_devices = list((set(DEVICE_ORDER) - {PHONE}) - present_devices)
+    missing_devices = list((set(DEVICE_ORDER) - {SMARTPHONE}) - present_devices)
 
     # if watch and both muscleBANS are missing, raise error as it is no possible to get timestamps
     if len(missing_devices) == 3:
         raise ValueError("All 3 devices (watch + both mBANs) are missing. Cannot infer missing acquisitions.")
 
-    # get the reference device from the dictionary with the data
+    # (1) get the reference device from the dictionary with the data
     for device in DEVICE_ORDER:
 
-        if device != PHONE and device in data_dict:
+        if device != SMARTPHONE and device in data_dict:
 
             # get reference device
             ref_device = device
@@ -394,14 +415,14 @@ def add_missing_device(data_dict, missing_data_dict, fs):
         # This scenario does not occur, written for code completion
         return missing_data_dict
 
-    # (3) Collect reference times. If the device that was used for reference has no missing start times, use the ones in data_dict.
+    # (2) Collect reference times. If the device that was used for reference has no missing start times, use the ones in data_dict.
     ref_times = data_dict[ref_device][START_TIMES].copy()
 
     # If the reference device has missing start times, merge the ones on both data_dict and missing_data_dict
     if ref_device in missing_data_dict:
         ref_times += missing_data_dict[ref_device][START_TIMES]
 
-    # (4) Add missing devices data to missing_data_dict, including the length of the acquisitions
+    # (3) Add missing devices data to missing_data_dict, including the length of the acquisitions
     for dev in missing_devices:
 
         missing_data_dict[dev] = {
@@ -412,7 +433,49 @@ def add_missing_device(data_dict, missing_data_dict, fs):
     return missing_data_dict
 
 
-def plot_device_bars(ax, data_dict, device_to_index, fs, color_map, edgecolor=None, linestyle='solid', linewidth=1.0):
+def _get_acquisition_time_range(acquisitions_dict: Dict[str, Dict[str, list]], missing_data_dict: Dict[str, Dict[str, list]],
+                                fs: int) -> Tuple[datetime, datetime]:
+    """
+    Compute the earliest start time and latest end time from acquisitions and missing data.
+
+    :param acquisitions_dict: Dictionary of acquisitions metadata.
+    :param missing_data_dict: Dictionary of missing data metadata.
+    :param fs: Sampling frequency (Hz).
+    :return: (min_start_time, latest_end_time) as datetime objects.
+    """
+
+    # Initialize boundaries as None (they will be updated in the loop)
+    min_start_time = None
+    latest_end_time = None
+
+    # Iterate over both acquisitions and missing data
+    for data_dict in (acquisitions_dict, missing_data_dict):
+        # Each device has lists of lengths and start times
+        for data in data_dict.values():
+            # Pair up each length with its corresponding start time
+            for length, start_str in zip(data[LENGTH], data[START_TIMES]):
+
+                # Convert start time string (HH-MM-SS) into datetime object
+                start_dt = datetime.strptime(start_str, "%H-%M-%S")
+
+                # Compute end time by adding duration (length / fs seconds)
+                end_dt = start_dt + timedelta(seconds=length / fs)
+
+                # Update minimum start time if this one is earlier
+                if min_start_time is None or start_dt < min_start_time:
+                    min_start_time = start_dt
+
+                # Update maximum end time if this one is later
+                if latest_end_time is None or end_dt > latest_end_time:
+                    latest_end_time = end_dt
+
+    # Return both boundaries
+    return min_start_time, latest_end_time
+
+
+def _plot_device_bars(ax: Axes, data_dict: Dict[str, Dict[str, list]], device_to_index: Dict[str, int], fs: int,
+                      color_map: Union[Callable[[int], str], Dict[str, str]], edgecolor: Optional[str] = None,
+                      linestyle: str = 'solid', linewidth: float = 1.0) -> None:
     """
     Plots horizontal bars for each device based on acquisition or missing data.
 
@@ -449,13 +512,15 @@ def plot_device_bars(ax, data_dict, device_to_index, fs, color_map, edgecolor=No
             )
 
 
-def plot_reference_acquisition(ax, acquisitions_dict, missing_data_dict, device_to_index, seconds: int = 20*60) -> None:
+def _plot_reference_acquisition(ax: Axes, acquisitions_dict: Dict[str, Dict[str, list]], missing_data_dict: Dict[str, Dict[str, list]],
+                                device_to_index: Dict[str, int], seconds: int = 20*60) -> None:
     """
     Plots a reference acquisition line (e.g., 20 minutes) on the first available acquisition
     from one of the devices (watch, mBAN right, or mBAN left).
 
     :param ax: The matplotlib axis to draw on.
     :param acquisitions_dict: Dictionary of acquisitions with start times and lengths.
+    :param missing_data_dict: Dictionary of missing acquisitions with start times and lengths.
     :param device_to_index: Mapping from device name to vertical index for plotting.
     :param seconds: Duration of the reference acquisition in seconds (default: 20 minutes).
     """
@@ -489,3 +554,26 @@ def plot_reference_acquisition(ax, acquisitions_dict, missing_data_dict, device_
         )
     )
 
+
+def _plot_device_labels_and_guides(ax: Axes, device_to_index: Dict[str, int], min_start_time: datetime,
+                                   latest_end_time: datetime) -> None:
+    """
+    Plot dashed horizontal guidelines and device labels on the y-axis.
+
+    :param ax: Matplotlib axis to plot on.
+    :param device_to_index: Dictionary mapping device names to their y-index.
+    :param min_start_time: Earliest acquisition time (datetime).
+    :param latest_end_time: Latest acquisition time (datetime).
+    """
+    # Loop through devices and their vertical positions
+    for device, i in device_to_index.items():
+        # Compute vertical positions for the bar and label
+        y_center = i * VERTICAL_SPACING
+        y_bottom = y_center - BAR_HEIGHT / 2
+        y_top = y_center + BAR_HEIGHT / 2
+
+        # Draw dashed horizontal lines at the top and bottom of the bar
+        ax.hlines(y=[y_bottom, y_top], xmin=min_start_time, xmax=latest_end_time + timedelta(seconds=5), colors="#06171C", linestyles="dashed", linewidth=1.1)
+
+        # Add the device name as a label on the left side
+        ax.text(min_start_time - timedelta(seconds=500), y_center, device, va="center", ha="right", fontsize=12, color="#06171C")

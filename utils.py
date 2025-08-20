@@ -1,3 +1,23 @@
+"""
+Utility functions for working with subject folder structures and acquisition times.
+
+Available Functions
+-------------------
+[Public]
+create_dir(...): Create a new directory inside a specified path if it does not already exist.
+extract_device_num_from_path(...): Extract the device/subject identifier (e.g., "#001") from a folder path.
+extract_group_from_path(...): Extract the group number (e.g., "1", "2", "3") from a folder path.
+extract_date_from_path(...): Extract the date string (YYYY-MM-DD) from a folder path.
+get_most_common_acquisition_times(...): Find the four most common acquisition times for a subject by scanning folder names and filtering device data.
+get_most_common_times(...): Compute the most common acquisition times from a list, with optional adjustment to merge times closer than 20 minutes.
+-------------------
+
+[Private]
+_remove_dates(...): Remove date folder names from a folder list, keeping only acquisition time folders.
+_adjust_most_common_times(...): Filter out acquisition times that are too close (< 20 minutes apart), keeping the most frequent ones.
+-------------------
+"""
+
 # ------------------------------------------------------------------------------------------------------------------- #
 # imports
 # ------------------------------------------------------------------------------------------------------------------- #

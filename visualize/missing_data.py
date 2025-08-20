@@ -1,5 +1,17 @@
 """
+Functions to detect and reconstruct missing sensor acquisitions.
 
+Available Functions
+-------------------
+[Public]
+get_missing_data(...): Identify missing acquisition times and durations for each device (except the phone), based on expected daily acquisition patterns.
+-------------------
+
+[Private]
+_has_close_time(...): Check whether a given timestamp is within the tolerance window of another timestamp in a list.
+_get_missing_timestamps(...): Compare expected acquisition times with actual ones to determine which are missing.
+_find_unique_timestamps(...): Extract unique acquisition timestamps across devices (excluding phone), accounting for tolerance in start times.
+-------------------
 """
 
 # ------------------------------------------------------------------------------------------------------------------- #
@@ -9,7 +21,7 @@ from typing import Dict, List
 from datetime import datetime
 
 # internal imports
-from constants import PHONE, ACQUISITION_TIME_SECONDS, MBAN_LEFT, MBAN_RIGHT
+from constants import PHONE, ACQUISITION_TIME_SECONDS
 from utils import get_most_common_acquisition_times
 
 # ------------------------------------------------------------------------------------------------------------------- #
@@ -37,12 +49,12 @@ def get_missing_data(subject_folder_path: str, acquisitions_dict: Dict[str, Dict
 
     Steps:
     (1) Obtain all unique timestamps of all devices, except the phone. As there is always some delay, timestamps that are
-        less than five minute apart are considered to be the same one.
+        less than ten minute apart are considered to be the same one.
 
     (2) Compare the start_times in the acquisitions_dict with the unique timestamps to get a list with missing timestamps
         for each device.
 
-    (3) If the length of the actual start times and the missing start times is less then four than there was one scheduled
+    (3) If the length of the actual start times and the missing start times is less than four then there was one scheduled
         acquisition that either did not happen or all devices failed. In this case find the last remaining missing timestamps
         based on the average start times of the entire week.
 
@@ -60,7 +72,7 @@ def get_missing_data(subject_folder_path: str, acquisitions_dict: Dict[str, Dict
              }
     :param fs: the sampling frequency of the sensors in Hz. Default = 100.
     :param tolerance_seconds: Time in seconds used to consider two start times as referring to the same acquisition.
-                            Default = 300. (e.g., 12:00:00 and 12:03:00 are considered to be the same start time).
+                            Default = 600. (e.g., 12:00:00 and 12:03:00 are considered to be the same start time).
     :return: A dictionary in the same format as `acquisitions_dict`, but containing only the missing acquisitions
              detected for each device.
     """
@@ -119,16 +131,37 @@ def get_missing_data(subject_folder_path: str, acquisitions_dict: Dict[str, Dict
 # private functions
 # ------------------------------------------------------------------------------------------------------------------- #
 
-
 def _has_close_time(time: datetime, time_list_dt: List[datetime], tolerance_seconds: int) -> bool:
+    """
+    Check whether a given timestamp is within the tolerance window of any timestamp in a list.
+
+    This function is used to determine if an acquisition time is "close enough"
+    to another (i.e., represents the same scheduled acquisition).
+
+    :param time: A datetime object to compare.
+    :param time_list_dt: List of datetime objects representing existing acquisition times.
+    :param tolerance_seconds: Time difference (in seconds) allowed for considering two times as the same.
+    :return: True if `time` is within the tolerance of any timestamp in `time_list_dt`, otherwise False.
+    """
     return any(abs((time - t).total_seconds()) <= tolerance_seconds for t in time_list_dt)
 
 
 def _get_missing_timestamps(unique_timestamps_list: List[datetime], acquisitions_times_list: List[str],
                             tolerance_seconds=600) -> List[str]:
+    """
+    Identify which expected acquisition times are missing for a device.
+
+    This function compares the unique expected acquisition times (found with the devices that acquired data) against the actual
+    acquisition times recorded by a device (that had missing acquisitions), and returns those that are missing.
+
+    :param unique_timestamps_list: List of datetime objects representing all expected acquisitions.
+    :param acquisitions_times_list: List of acquisition start times (string format) for the device.
+    :param tolerance_seconds: Allowed deviation (in seconds) for considering times as equal. Default = 600.
+    :return: List of missing acquisition times (string format, TIME_FORMAT).
+    """
 
     # innit list to store the missing times
-    missing_times = []
+    missing_times: List[str] = []
 
     # change the sensor start times to datetime
     device_timestamp_dt = [datetime.strptime(timestamp, TIME_FORMAT) for timestamp in acquisitions_times_list]
@@ -146,6 +179,16 @@ def _get_missing_timestamps(unique_timestamps_list: List[datetime], acquisitions
 
 
 def _find_unique_timestamps(acquisitions_dict: Dict[str, Dict[str, list]], tolerance_seconds: int) -> List[datetime]:
+    """
+    Finds a set of start times that are expected for all devices, except the smartphone. this is done by getting the
+    unique timestamps for all three devices (watch, mBAN right, and mBAN left), with a tolerance, since the devices don't start
+    acquiring exactly at the same time.
+
+    :param acquisitions_dict: Dictionary with device acquisition data.
+                              Each entry contains 'start_times' and 'length'.
+    :param tolerance_seconds: Allowed deviation (in seconds) for considering timestamps as the same acquisition.
+    :return: A list of unique acquisition times (datetime objects).
+    """
 
     # list for holding all timestamps found for the 3 devices that acquire at the same time
     all_daily_timestamps: List[datetime] = []

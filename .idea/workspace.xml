@@ -4,14 +4,13 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f6da5794-6705-4583-ae40-8ce607db45e5" name="Changes" comment="Added logic to plot a device that was missing for the entire day">
-      <change afterPath="$PROJECT_DIR$/visualize/legend_handlers.py" afterDir="false" />
+    <list default="true" id="f6da5794-6705-4583-ae40-8ce607db45e5" name="Changes" comment="Added a reference bar to the plot (and legend) regarding the 20 min chunks. Also translated the plot to portuguese">
       <change beforePath="$PROJECT_DIR$/.idea/dictionaries/project.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/dictionaries/project.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/constants.py" beforeDir="false" afterPath="$PROJECT_DIR$/constants.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/load/meta_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/load/meta_data.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/utils.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/visualize/missing_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/visualize/missing_data.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/visualize/parser.py" beforeDir="false" afterPath="$PROJECT_DIR$/visualize/parser.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/visualize/visualize_acquisitions.py" beforeDir="false" afterPath="$PROJECT_DIR$/visualize/visualize_acquisitions.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -171,7 +170,15 @@
       <option name="project" value="LOCAL" />
       <updated>1755609114750</updated>
     </task>
-    <option name="localTasksCounter" value="12" />
+    <task id="LOCAL-00012" summary="Added a reference bar to the plot (and legend) regarding the 20 min chunks. Also translated the plot to portuguese">
+      <option name="closed" value="true" />
+      <created>1755699877176</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1755699877176</updated>
+    </task>
+    <option name="localTasksCounter" value="13" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -197,17 +204,7 @@
     <MESSAGE value="changed logic for fetching missing data - now also based on timestamps from other devices" />
     <MESSAGE value="Bug fixes. Main one was handling when the logger file does not have all the timestamps - get from folder name. Other minor ones" />
     <MESSAGE value="Added logic to plot a device that was missing for the entire day" />
-    <option name="LAST_COMMIT_MESSAGE" value="Added logic to plot a device that was missing for the entire day" />
-  </component>
-  <component name="XDebuggerManager">
-    <breakpoint-manager>
-      <breakpoints>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/visualize/visualize_acquisitions.py</url>
-          <line>90</line>
-          <option name="timeStamp" value="1" />
-        </line-breakpoint>
-      </breakpoints>
-    </breakpoint-manager>
+    <MESSAGE value="Added a reference bar to the plot (and legend) regarding the 20 min chunks. Also translated the plot to portuguese" />
+    <option name="LAST_COMMIT_MESSAGE" value="Added a reference bar to the plot (and legend) regarding the 20 min chunks. Also translated the plot to portuguese" />
   </component>
 </project>
