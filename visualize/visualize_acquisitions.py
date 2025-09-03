@@ -215,8 +215,8 @@ def _get_daily_acquisitions_metadata(subject_folder_path: str, date: str) -> Dic
              - 'start_times': List of corresponding start timestamps.
              Example:
              {
-                 "phone": {"length": [10000], "start_times": ["11:20:20.000"]},
-                 "watch": {"length": [500, 950], "start_times": ["10:20:50.000", "12:00:00.000"]}
+                 "phone": {"length": [10000], "start_times": ["11:20:20"]},
+                 "watch": {"length": [500, 950], "start_times": ["10:20:50", "12:00:00"]}
              }
     """
     final_dict = {}

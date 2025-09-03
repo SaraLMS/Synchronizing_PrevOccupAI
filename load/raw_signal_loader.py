@@ -28,6 +28,7 @@ import pandas as pd
 import numpy as np
 from typing import List, Tuple, Dict, Any, Union
 from tqdm import tqdm
+import math
 
 # internal imports
 from load.parser import get_file_paths_by_device, extract_sensor_from_filename
@@ -49,6 +50,7 @@ LOADED_SENSORS = 'loaded sensors'
 STARTING_TIMES = 'starting times'
 STOPPING_TIMES = 'stopping times'
 
+ROUNDING_FACTOR = 1000 # sampling rate  times 10
 # ------------------------------------------------------------------------------------------------------------------- #
 # public functions
 # ------------------------------------------------------------------------------------------------------------------- #
@@ -105,9 +107,11 @@ def load_data_from_same_recording(folder_path: str, fs: int = 100, padding_type:
             # (2) resample the data to 100 Hz
             interpolated_data = _re_sample_data(padded_data, report, fs=fs)
 
-            # (3) create a DataFrame containing all the data
-            aligned_sensor_df = pd.concat([interpolated_data[0]] + [df.drop(columns=[TIME_COLUMN_NAME]) for df in interpolated_data[1:]],
-                                          axis=1)
+            # (3) create a DataFrame containing all the data and sort
+            # aligned_sensor_df = pd.concat([interpolated_data[0]] + [df.drop(columns=[TIME_COLUMN_NAME]) for df in interpolated_data[1:]],
+            #                               axis=1)
+            aligned_sensor_df = pd.concat(interpolated_data, axis=1)
+            aligned_sensor_df = aligned_sensor_df.sort_index()
 
             # add to the dictionary
             device_data_dict[device] = aligned_sensor_df
@@ -386,7 +390,8 @@ def _re_sample_data(sensor_data: List[pd.DataFrame], report:  Dict[str, Any], fs
     This function takes a list of sensor data DataFrames and resamples each sensor's data to the desired
     sampling frequency (`fs`). For IMU-based sensors (ACC, GYR, MAG), cubic spline interpolation is used,
     and for Rotation Vector data, SLERP interpolation is performed. For the noise recorder and heart rate sensor,
-    zero order hold interpolation (repeat the previous value).
+    zero order hold interpolation (repeat the previous value). This function also corrects possible rounding errors
+    in the time column.
 
     :param sensor_data: A list of DataFrames, each containing sensor data. It is assumed that the first contains
                         the time axis, while the other columns contain sensor data.
@@ -433,6 +438,9 @@ def _re_sample_data(sensor_data: List[pd.DataFrame], report:  Dict[str, Any], fs
 
             # This does not happen - just for code completion
             print(f"There is no interpolation implemented for the sensor you have chosen. Chosen sensor: {sensor_name}.")
+
+        # fix rounding errors in the time column
+        interpolated_sensor_df = _fix_rounding_error(interpolated_sensor_df)
 
         # append interpolated data to list
         re_sampled_data.append(interpolated_sensor_df)
@@ -496,3 +504,48 @@ def _get_largest_file(folder_path, filenames: List[str]) -> str:
         file_paths.append(file_path)
 
     return max(file_paths, key=lambda f: os.path.getsize(f))
+
+
+
+def _fix_rounding_error(sensor_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Fixes rounding errors in the time column of the sensor DataFrame. This is done in several steps:
+
+    (1) multiply the time column values by the rounding_factor (sampling rate * 10)
+
+    (2) separates the time series into two: one with the values that are divisible by 10, and the other were they're not
+
+    (3) Sum +1 to all values of the series where te values are not divisible by one
+
+    (4) Concat this two time series back into one and add this to the dataframe as the new time column and device by 1000
+
+    (5) set the time column as axis of the dataframe
+
+    :param sensor_df: pd:DataFrame containing a time column expected to be numeric.
+    :return: pd.DataFrame with the corrected time column replacing the original,
+        sorted and adjusted for rounding errors. The time column is set as the index.
+    """
+
+    # (1) multiply time column by 1000
+    time_column = sensor_df[TIME_COLUMN_NAME].multiply(ROUNDING_FACTOR).apply(math.trunc)
+
+    # (2) separate time series into two series
+    # first series has the values that are divisible by10
+    div_by_10 = time_column[time_column % 10 == 0].sort_values()
+
+    # (3) seconds series has the values that are not divisible by 10
+    not_div_by_10 = time_column[time_column % 10 != 0].sort_values().add(1)
+
+    # (4) concat the two series into one
+    final_time_series = pd.concat([div_by_10, not_div_by_10]).sort_values()
+
+    # Remove 'time' column
+    sensor_df = sensor_df.drop(columns=[TIME_COLUMN_NAME])
+
+    # Assign final_series to 'time' column and divide by the rounding factor
+    sensor_df[TIME_COLUMN_NAME] = final_time_series.div(ROUNDING_FACTOR)
+
+    # (5) set time column as axis
+    sensor_df = sensor_df.set_index(TIME_COLUMN_NAME)
+
+    return sensor_df

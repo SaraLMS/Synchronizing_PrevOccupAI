@@ -22,7 +22,7 @@ from scipy.spatial.transform import Slerp
 from scipy.interpolate import CubicSpline, interp1d
 from scipy.signal import resample_poly
 from constants import TIME_COLUMN_NAME
-
+import math
 # ------------------------------------------------------------------------------------------------------------------- #
 # file specific constants
 # ------------------------------------------------------------------------------------------------------------------- #
@@ -198,6 +198,8 @@ def interpolate_heart_rate_sensor(sensor_df: pd.DataFrame, fs: int = 100) -> pd.
         if len(hr_segment_df) < 2:
             continue
 
+        time_axis_segment[0] = np.floor(time_axis_segment[0])
+
         # define the new time axis
         time_axis_inter = np.arange(time_axis_segment[0], time_axis_segment[-1], 1 / fs)
 
@@ -304,4 +306,11 @@ def _generate_time_column_from_samples(signal_size:int, fs: int):
     time_column = np.arange(signal_size) * delta_t
 
     return time_column
+
+def _truncate(val, decimals=2):
+
+    factor = 10.0 ** decimals
+    truncated = math.trunc(val * factor) / factor
+
+    return truncated
 
